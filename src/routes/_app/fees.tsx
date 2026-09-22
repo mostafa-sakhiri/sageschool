@@ -346,10 +346,16 @@ function PlanDialog({ onClose }: { onClose: () => void }) {
               <MenuItem value="one_time">{t('fees.freq.one_time')}</MenuItem>
             </TextField>
             {frequency === 'monthly' && (
-              <TextField label={t('fees.months')} type="number" value={months} onChange={(e) => setMonths(e.target.value)} sx={{ width: 120 }} />
+              <TextField label={t('fees.months')} type="number" value={months} onChange={(e) => setMonths(e.target.value)} sx={{ minWidth: 110, flexShrink: 0 }} />
             )}
           </Stack>
-          <TextField select label={t('fees.appliesTo')} value={nodeId} onChange={(e) => setNodeId(e.target.value)}>
+          <TextField
+            select
+            label={t('fees.appliesTo')}
+            value={nodeId}
+            onChange={(e) => setNodeId(e.target.value)}
+            slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+          >
             <MenuItem value="">{t('ann.wholeSchool')}</MenuItem>
             {(nodes.data ?? [])
               .filter((n) => n.kind === 'cycle' || n.kind === 'level')
