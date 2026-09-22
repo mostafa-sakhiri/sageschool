@@ -1,7 +1,7 @@
 import { useContext } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Box, Paper, Stack, Step, StepLabel, Stepper, Tab, Tabs, Typography } from '@mui/material'
+import { Box, Button, Paper, Stack, Step, StepLabel, Stepper, Tab, Tabs, Typography } from '@mui/material'
 import { OnboardingShell } from '#/components/OnboardingShell'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, Card, Tag } from '#/components/ui'
@@ -15,12 +15,14 @@ import { RoomsSection } from '#/features/setup/RoomsSection'
 import { formatMinutes, nodeName, nodesQuery } from '#/features/structure/api'
 import { tokens } from '#/theme/theme'
 
-type Search = { step?: number; tab?: string }
+type Search = { step?: number; tab?: string; new?: boolean }
 
 export const Route = createFileRoute('/_app/setup')({
   validateSearch: (s: Record<string, unknown>): Search => ({
     step: s.step ? Number(s.step) : undefined,
     tab: typeof s.tab === 'string' ? s.tab : undefined,
+    // ?new=1: create another school while already a member of one
+    new: s.new === true || s.new === 1 || s.new === '1' || undefined,
   }),
   component: SetupPage,
 })
@@ -29,23 +31,30 @@ const STEPS = ['setup.steps.school', 'setup.steps.levels', 'setup.steps.year', '
 
 function SetupPage() {
   const ctx = useContext(SchoolContext)
-  const { step } = Route.useSearch()
-  // No school yet: steps 1-2 create it. With a school: ?step=3..5 continues the
-  // wizard, otherwise this is the settings page.
-  if (!ctx) return <Wizard step={step === 2 ? 2 : 1} />
+  const { step, new: isNew } = Route.useSearch()
+  // No school yet (or ?new=1): steps 1-2 create it. With a school: ?step=3..5
+  // continues the wizard, otherwise this is the settings page.
+  if (!ctx || (isNew && (!step || step <= 2))) return <Wizard step={step === 2 ? 2 : 1} />
   if (step && step >= 3) return <Wizard step={step} />
   return <Settings />
 }
 
 function Wizard({ step }: { step: number }) {
   const { t } = useI18n()
+  const ctx = useContext(SchoolContext)
+  const { new: isNew } = Route.useSearch()
   const navigate = useNavigate()
-  const go = (s: number) => navigate({ to: '/setup', search: { step: s } })
+  const go = (s: number) => navigate({ to: '/setup', search: { step: s, new: s <= 2 ? isNew : undefined } })
   return (
     <OnboardingShell wide>
-      <Typography variant="overline" sx={{ color: tokens.accent }}>
-        {t('setup.install')}
-      </Typography>
+      <Stack direction="row" sx={{ alignItems: 'center' }}>
+        <Typography variant="overline" sx={{ color: tokens.accent, flex: 1 }}>
+          {isNew ? t('setup.installAnother') : t('setup.install')}
+        </Typography>
+        {ctx && isNew && (
+          <Button onClick={() => navigate({ to: '/' })}>{t('setup.backTo', { name: ctx.school.name })}</Button>
+        )}
+      </Stack>
       <Stepper activeStep={step - 1} alternativeLabel sx={{ my: 3 }}>
         {STEPS.map((k) => (
           <Step key={k}>

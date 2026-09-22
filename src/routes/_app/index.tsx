@@ -115,6 +115,8 @@ function OfficeDash() {
   const classRows = classes.data ?? []
   const unplaced = studentRows.filter((s) => s.status === 'active' && !currentEnrollment(s, ctx.year?.id))
   const noTimetable = classRows.filter((c) => !published.data?.has(c.id))
+  // Only this year's classes count (the query covers every year of the school).
+  const publishedCount = classRows.filter((c) => published.data?.has(c.id)).length
   const openCases = (cases.data ?? []).filter((c) => c.status === 'open')
   const overdue = (balances.data ?? []).filter((b) => b.payment_status === 'overdue')
   const noParent = studentRows.filter((s) => s.guardians.length === 0)
@@ -139,7 +141,7 @@ function OfficeDash() {
       <Stack direction="row" spacing={1.25} useFlexGap sx={{ flexWrap: 'wrap' }}>
         <StatCard value={enrolled} label={t('dash.enrolled')} />
         <StatCard value={classRows.length} label={t('nav.classes')} />
-        <StatCard value={published.data?.size ?? 0} label={t('dash.publishedTimetables')} />
+        <StatCard value={publishedCount} label={t('dash.publishedTimetables')} />
         <StatCard value={absentCount} label={t('dash.absentToday')} />
       </Stack>
       <SectionTitle aside={<Tag tone="warn" label={todos.length} />}>{t('dash.todo')}</SectionTitle>

@@ -38,6 +38,8 @@ import { useI18n } from '#/i18n/i18n'
 import { rememberRole, rememberSchool, useSchool, type Role } from '#/lib/session'
 import { supabase } from '#/lib/supabase/client'
 import { tokens } from '#/theme/theme'
+import { ContextSwitcher } from './ContextSwitcher'
+import { QuickActions } from './QuickActions'
 
 type NavItem = { to: string; key: string; icon: React.ReactNode; roles: Role[] }
 
@@ -156,33 +158,8 @@ function Sidebar({ onNavigate }: { onNavigate: () => void }) {
         overflowY: 'auto',
       }}
     >
-      <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center', px: 0.5, mb: 2.75 }}>
-        <Box
-          sx={{
-            width: 32,
-            height: 32,
-            borderRadius: '10px',
-            bgcolor: tokens.accent,
-            color: '#fff',
-            display: 'grid',
-            placeItems: 'center',
-            fontFamily: tokens.display,
-            fontWeight: 600,
-            fontSize: 17,
-            flexShrink: 0,
-          }}
-        >
-          {ctx.school.name.charAt(0).toUpperCase()}
-        </Box>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography noWrap dir="auto" sx={{ fontSize: 13, fontWeight: 600, color: tokens.paper }}>
-            {ctx.school.name}
-          </Typography>
-          <Typography noWrap sx={{ fontSize: 11, color: tokens.sidebarMuted }}>
-            {ctx.year ? t('shell.year', { name: ctx.year.name }) : t('shell.noYear')}
-          </Typography>
-        </Box>
-      </Stack>
+      <ContextSwitcher />
+      <QuickActions onDone={onNavigate} />
 
       <Stack spacing={0.25}>
         {items.map((n) => {
@@ -289,13 +266,6 @@ function UserCard() {
             <MenuItem key={r} onClick={() => switchTo(ctx.school.id, r)} selected={r === ctx.role}>
               <ListItemIcon>{r === ctx.role ? <CheckOutlined fontSize="small" /> : <SwapHorizOutlined fontSize="small" />}</ListItemIcon>
               <ListItemText>{t('shell.actAs', { role: t(`role.${r}`) })}</ListItemText>
-            </MenuItem>
-          ))}
-        {ctx.schools.length > 1 &&
-          ctx.schools.map((s) => (
-            <MenuItem key={s.id} onClick={() => switchTo(s.id)} selected={s.id === ctx.school.id}>
-              <ListItemIcon>{s.id === ctx.school.id ? <CheckOutlined fontSize="small" /> : <SwapHorizOutlined fontSize="small" />}</ListItemIcon>
-              <ListItemText>{s.name}</ListItemText>
             </MenuItem>
           ))}
         <MenuItem onClick={signOut}>

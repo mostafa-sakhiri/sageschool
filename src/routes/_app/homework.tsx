@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Paper, Stack, TextField, Typography } from '@mui/material'
@@ -16,7 +16,9 @@ import { subjectsQuery } from '#/features/structure/api'
 import { tokens } from '#/theme/theme'
 import { homeworkQuery } from '#/features/queries'
 
-export const Route = createFileRoute('/_app/homework')({ component: HomeworkPage })
+export const Route = createFileRoute('/_app/homework')({
+  // ?new=1 opens the creation dialog (header quick actions)
+  validateSearch: (s: Record<string, unknown>): { new?: boolean } => ({ new: s.new === true || s.new === 1 || s.new === '1' || undefined }), component: HomeworkPage })
 
 
 function HomeworkPage() {
@@ -25,6 +27,13 @@ function HomeworkPage() {
   const list = useQuery(homeworkQuery(ctx.school.id))
   const subjects = useQuery(subjectsQuery(ctx.school.id))
   const [open, setOpen] = useState(false)
+  const { new: openNew } = Route.useSearch()
+  const navigateSelf = Route.useNavigate()
+  useEffect(() => {
+    if (!openNew) return
+    setOpen(true)
+    navigateSelf({ search: {}, replace: true })
+  }, [openNew, navigateSelf])
   const canWrite = ctx.role === 'teacher'
   const today = todayIso()
 

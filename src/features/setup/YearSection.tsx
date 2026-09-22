@@ -24,10 +24,12 @@ import { Tag } from '#/components/ui'
 import { TEMPLATE, yearsQuery } from '#/features/structure/api'
 import { formatDate } from '#/lib/format'
 
-// Default: the Moroccan school year containing today (Sept -> June).
-function defaultYear() {
+// Default: the year after the latest existing one, else the Moroccan school
+// year containing today (Sept -> June).
+function defaultYear(years: { starts_on: string }[] = []) {
   const now = new Date()
-  const y = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1
+  const latest = years.map((y) => Number(y.starts_on.slice(0, 4))).sort().pop()
+  const y = latest != null ? latest + 1 : now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1
   return { name: `${y}-${y + 1}`, starts_on: `${y}-09-07`, ends_on: `${y + 1}-06-30` }
 }
 
@@ -63,17 +65,19 @@ export function YearForm({
   schoolId,
   onDone,
   submitLabel,
+  years = [],
 }: {
   schoolId: string
   onDone?: (r: { yearId: string; hours: number }) => void
   submitLabel?: string
+  years?: { starts_on: string; is_current: boolean }[]
 }) {
   const { t } = useI18n()
-  const d = defaultYear()
+  const d = defaultYear(years)
   const [name, setName] = useState(d.name)
   const [start, setStart] = useState(d.starts_on)
   const [end, setEnd] = useState(d.ends_on)
-  const [current, setCurrent] = useState(true)
+  const [current, setCurrent] = useState(!years.some((y) => y.is_current))
   const [applyHours, setApplyHours] = useState(true)
   const create = useCreateYear(schoolId)
 
@@ -178,7 +182,7 @@ export function YearSection({ schoolId }: { schoolId: string }) {
           <Typography variant="h5" sx={{ mb: 2 }}>
             {t('year.new')}
           </Typography>
-          <YearForm schoolId={schoolId} onDone={() => setAdding(false)} />
+          <YearForm schoolId={schoolId} years={years.data ?? []} onDone={() => setAdding(false)} />
         </Paper>
       ) : (
         <Box>

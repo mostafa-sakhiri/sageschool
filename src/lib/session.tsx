@@ -1,5 +1,5 @@
 import { createContext, useContext, useSyncExternalStore } from 'react'
-import { queryOptions, useQuery } from '@tanstack/react-query'
+import { queryOptions } from '@tanstack/react-query'
 import { supabase } from './supabase/client'
 import { must } from './errors'
 
@@ -44,22 +44,25 @@ export const sessionQuery = (sub: string) =>
     },
   })
 
-export const currentYearQuery = (schoolId: string) =>
+export type SchoolYear = { id: string; name: string; starts_on: string; ends_on: string; is_current: boolean }
+
+// All years of a school, newest first (shared key with the settings page).
+export const schoolYearsQuery = (schoolId: string) =>
   queryOptions({
-    queryKey: ['school', schoolId, 'current-year'],
+    queryKey: ['school', schoolId, 'years'],
     queryFn: async () =>
       must(
         await supabase
           .from('academic_years')
           .select('id, name, starts_on, ends_on, is_current')
           .eq('school_id', schoolId)
-          .eq('is_current', true)
-          .maybeSingle(),
-      ),
+          .order('starts_on', { ascending: false }),
+      ) as SchoolYear[],
   })
 
 const LS_SCHOOL = 'sage.school'
 const lsRole = (schoolId: string) => `sage.role.${schoolId}`
+const lsYear = (schoolId: string) => `sage.year.${schoolId}`
 
 function lsGet(key: string) {
   try {
@@ -120,6 +123,16 @@ export function rememberRole(schoolId: string, role: Role) {
   lsSet(lsRole(schoolId), role)
   bumpSelection()
 }
+// The year being viewed is a per-user choice; the school's official current
+// year (is_current) is only changed from Settings.
+export function rememberYear(schoolId: string, yearId: string) {
+  lsSet(lsYear(schoolId), yearId)
+  bumpSelection()
+}
+export function resolveYear(schoolId: string, years: SchoolYear[]) {
+  const saved = lsGet(lsYear(schoolId))
+  return years.find((y) => y.id === saved) ?? years.find((y) => y.is_current) ?? years[0] ?? null
+}
 
 export type SchoolCtx = {
   sub: string
@@ -129,7 +142,8 @@ export type SchoolCtx = {
   member: Membership
   role: Role
   roles: Role[]
-  year: { id: string; name: string; starts_on: string; ends_on: string } | null
+  year: SchoolYear | null
+  years: SchoolYear[]
   isOffice: boolean
   isAdmin: boolean
 }
@@ -142,6 +156,3 @@ export function useSchool() {
   return ctx
 }
 
-export function useCurrentYear(schoolId: string) {
-  return useQuery(currentYearQuery(schoolId))
-}

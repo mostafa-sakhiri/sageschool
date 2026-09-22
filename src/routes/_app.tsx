@@ -4,8 +4,9 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchClaims } from '#/lib/auth'
 import {
   SchoolContext,
-  currentYearQuery,
   resolveActive,
+  resolveYear,
+  schoolYearsQuery,
   sessionQuery,
   useSelectionVersion,
   type SchoolCtx,
@@ -42,10 +43,15 @@ function AppLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- selection: localStorage changed
     [session.data, selection],
   )
-  const year = useQuery({
-    ...currentYearQuery(active?.school?.id ?? ''),
+  const years = useQuery({
+    ...schoolYearsQuery(active?.school?.id ?? ''),
     enabled: !!active?.school,
   })
+  const year = useMemo(
+    () => (active?.school && years.data ? resolveYear(active.school.id, years.data) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selection: localStorage changed
+    [active?.school, years.data, selection],
+  )
 
   if (session.isPending) return <FullPageLoading />
   if (session.isError) return <ErrorState error={session.error} onRetry={() => session.refetch()} />
@@ -62,7 +68,7 @@ function AppLayout() {
     if (pathname !== '/setup') return <Navigate to="/setup" />
     return <Outlet />
   }
-  if (year.isPending && active.school) return <FullPageLoading />
+  if (years.isPending && active.school) return <FullPageLoading />
 
   const ctx: SchoolCtx = {
     sub: claims.sub,
@@ -72,7 +78,8 @@ function AppLayout() {
     member: active.member!,
     role: active.member!.role,
     roles: active.roles,
-    year: year.data ?? null,
+    year,
+    years: years.data ?? [],
     isOffice: active.member!.role === 'admin' || active.member!.role === 'staff',
     isAdmin: active.member!.role === 'admin',
   }

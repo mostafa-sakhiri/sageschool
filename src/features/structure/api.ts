@@ -52,18 +52,8 @@ export const roomsQuery = (schoolId: string) =>
       must(await supabase.from('rooms').select('id, name, capacity').eq('school_id', schoolId).order('name')),
   })
 
-export const yearsQuery = (schoolId: string) =>
-  queryOptions({
-    queryKey: keys.years(schoolId),
-    queryFn: async () =>
-      must(
-        await supabase
-          .from('academic_years')
-          .select('id, name, starts_on, ends_on, is_current')
-          .eq('school_id', schoolId)
-          .order('starts_on', { ascending: false }),
-      ),
-  })
+// Years: shared with the session layer (same cache entry).
+export { schoolYearsQuery as yearsQuery } from '#/lib/session'
 
 export const hoursQuery = (schoolId: string, yearId: string) =>
   queryOptions({

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -35,6 +35,8 @@ import { CASE_TONE, casesQuery, type CaseRow } from '#/features/queries'
 
 
 export const Route = createFileRoute('/_app/cases')({
+  // ?new=1 opens the creation dialog (header quick actions)
+  validateSearch: (s: Record<string, unknown>): { new?: boolean } => ({ new: s.new === true || s.new === 1 || s.new === '1' || undefined }),
   loader: ({ context }) => context.schoolId && context.queryClient.prefetchQuery(casesQuery(context.schoolId)),
   component: CasesPage,
 })
@@ -46,6 +48,13 @@ function CasesPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const [filter, setFilter] = useState<'active' | 'resolved'>('active')
   const [composing, setComposing] = useState(false)
+  const { new: openNew } = Route.useSearch()
+  const navigateSelf = Route.useNavigate()
+  useEffect(() => {
+    if (!openNew) return
+    setComposing(true)
+    navigateSelf({ search: {}, replace: true })
+  }, [openNew, navigateSelf])
 
   const rows = (cases.data ?? []).filter((c) => (filter === 'resolved' ? c.status === 'resolved' : c.status !== 'resolved'))
   const current = (cases.data ?? []).find((c) => c.id === selected) ?? rows[0]

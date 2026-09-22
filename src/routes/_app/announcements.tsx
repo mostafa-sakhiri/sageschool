@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -36,6 +36,8 @@ import { announcementsQuery, type Announcement } from '#/features/queries'
 
 
 export const Route = createFileRoute('/_app/announcements')({
+  // ?new=1 opens the creation dialog (header quick actions)
+  validateSearch: (s: Record<string, unknown>): { new?: boolean } => ({ new: s.new === true || s.new === 1 || s.new === '1' || undefined }),
   loader: ({ context }) => context.schoolId && context.queryClient.prefetchQuery(announcementsQuery(context.schoolId)),
   component: AnnouncementsPage,
 })
@@ -59,6 +61,13 @@ function AnnouncementsPage() {
     },
   })
   const [open, setOpen] = useState(false)
+  const { new: openNew } = Route.useSearch()
+  const navigateSelf = Route.useNavigate()
+  useEffect(() => {
+    if (!openNew) return
+    setOpen(true)
+    navigateSelf({ search: {}, replace: true })
+  }, [openNew, navigateSelf])
 
   const targetLabel = (a: Announcement) => {
     if (!a.targets.length) return [t('ann.wholeSchool')]
