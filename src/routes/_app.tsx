@@ -7,6 +7,7 @@ import {
   currentYearQuery,
   resolveActive,
   sessionQuery,
+  useSelectionVersion,
   type SchoolCtx,
 } from '#/lib/session'
 import { ErrorState, FullPageLoading } from '#/components/states'
@@ -35,7 +36,12 @@ function AppLayout() {
   const t = useT()
   const session = useQuery(sessionQuery(claims.sub))
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const active = useMemo(() => (session.data ? resolveActive(session.data) : null), [session.data])
+  const selection = useSelectionVersion()
+  const active = useMemo(
+    () => (session.data ? resolveActive(session.data) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selection: localStorage changed
+    [session.data, selection],
+  )
   const year = useQuery({
     ...currentYearQuery(active?.school?.id ?? ''),
     enabled: !!active?.school,

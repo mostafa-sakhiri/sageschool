@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useSyncExternalStore } from 'react'
 import { queryOptions, useQuery } from '@tanstack/react-query'
 import { supabase } from './supabase/client'
 import { must } from './errors'
@@ -91,11 +91,34 @@ export function resolveActive(data: SessionData) {
   return { schools, school, member, roles }
 }
 
+// The active school/role lives in localStorage, which React can't observe.
+// A version counter makes every change re-render the layout: the session
+// data itself doesn't change when switching, so a memo keyed on it alone
+// would keep the previous school.
+let selectionVersion = 0
+const listeners = new Set<() => void>()
+function bumpSelection() {
+  selectionVersion++
+  for (const l of listeners) l()
+}
+export function useSelectionVersion() {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l)
+      return () => listeners.delete(l)
+    },
+    () => selectionVersion,
+    () => 0,
+  )
+}
+
 export function rememberSchool(schoolId: string) {
   lsSet(LS_SCHOOL, schoolId)
+  bumpSelection()
 }
 export function rememberRole(schoolId: string, role: Role) {
   lsSet(lsRole(schoolId), role)
+  bumpSelection()
 }
 
 export type SchoolCtx = {

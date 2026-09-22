@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
+import { Link, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   Avatar,
@@ -228,6 +228,7 @@ function UserCard() {
   const { t } = useI18n()
   const ctx = useSchool()
   const navigate = useNavigate()
+  const router = useRouter()
   const queryClient = useQueryClient()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const initials = ctx.user.full_name
@@ -243,11 +244,12 @@ function UserCard() {
     navigate({ to: '/login', search: {} })
   }
 
-  const switchTo = (schoolId: string, role?: Role) => {
-    rememberSchool(schoolId)
-    if (role) rememberRole(schoolId, role)
+  const switchTo = async (schoolId: string, role?: Role) => {
     setAnchor(null)
-    queryClient.invalidateQueries({ queryKey: ['session'] })
+    if (role) rememberRole(schoolId, role)
+    rememberSchool(schoolId)
+    // Re-run the layout's beforeLoad so loaders prefetch for the new school.
+    await router.invalidate()
     navigate({ to: '/' })
   }
 
