@@ -95,7 +95,7 @@ function AnnouncementsPage() {
             {rows.map((a) => (
               <Paper key={a.id} variant="outlined" sx={{ p: 2.25, borderColor: a.priority === 'urgent' ? tokens.warnLine : tokens.lineSoft }}>
                 <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 0.75 }}>
-                  <Typography variant="h5" sx={{ flex: 1, minWidth: 200 }}>
+                  <Typography variant="h5" dir="auto" sx={{ flex: 1, minWidth: 200 }}>
                     {a.title}
                   </Typography>
                   {a.priority !== 'normal' && <Tag tone={a.priority === 'urgent' ? 'danger' : 'warn'} label={t(`ann.priority.${a.priority}`)} />}
@@ -104,7 +104,7 @@ function AnnouncementsPage() {
                     {formatDateTime(a.published_at ?? a.created_at, locale)}
                   </Typography>
                 </Stack>
-                <Typography sx={{ whiteSpace: 'pre-wrap', color: tokens.inkSoft, fontSize: 14.5 }}>{a.body}</Typography>
+                <Typography dir="auto" sx={{ whiteSpace: 'pre-wrap', color: tokens.inkSoft, fontSize: 14.5 }}>{a.body}</Typography>
                 {ctx.isOffice && (
                   <Stack direction="row" spacing={1} useFlexGap sx={{ mt: 1.25, flexWrap: 'wrap', alignItems: 'center' }}>
                     {targetLabel(a).map((l, i) => (

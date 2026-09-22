@@ -49,7 +49,7 @@ function HomeworkPage() {
               return (
                 <Paper key={h.id} variant="outlined" sx={{ p: 2, opacity: late ? 0.7 : 1 }}>
                   <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                    <Typography variant="h5" sx={{ flex: 1, minWidth: 180 }}>
+                    <Typography variant="h5" dir="auto" sx={{ flex: 1, minWidth: 180 }}>
                       {h.title}
                     </Typography>
                     <Tag label={subjects.data?.find((s) => s.id === h.subject_id)?.name ?? '—'} tone="info" />
@@ -60,7 +60,7 @@ function HomeworkPage() {
                       </Typography>
                     )}
                   </Stack>
-                  <Typography sx={{ mt: 0.75, whiteSpace: 'pre-wrap', color: tokens.inkSoft, fontSize: 14.5 }}>{h.body}</Typography>
+                  <Typography dir="auto" sx={{ mt: 0.75, whiteSpace: 'pre-wrap', color: tokens.inkSoft, fontSize: 14.5 }}>{h.body}</Typography>
                 </Paper>
               )
             })}

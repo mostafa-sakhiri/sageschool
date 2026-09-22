@@ -151,7 +151,7 @@ function Thread({ c }: { c: CaseRow }) {
   return (
     <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 }, display: 'flex', flexDirection: 'column', minHeight: 420 }}>
       <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 1 }}>
-        <Typography variant="h4" sx={{ flex: 1 }}>
+        <Typography variant="h4" dir="auto" sx={{ flex: 1 }}>
           {c.subject}
         </Typography>
         <Tag tone={CASE_TONE[c.status]} label={t(`cases.status.${c.status}`)} />
@@ -190,7 +190,7 @@ function Thread({ c }: { c: CaseRow }) {
               <Typography sx={{ fontSize: 12, fontWeight: 600, color: tokens.inkMuted, mb: 0.5 }}>
                 {m.author?.user?.full_name} · {fromSchool ? t('cases.school') : t('role.parent')} · {formatDateTime(m.created_at, locale)}
               </Typography>
-              <Typography sx={{ whiteSpace: 'pre-wrap', fontSize: 14.5 }}>{m.body}</Typography>
+              <Typography dir="auto" sx={{ whiteSpace: 'pre-wrap', fontSize: 14.5 }}>{m.body}</Typography>
             </Box>
           )
         })}

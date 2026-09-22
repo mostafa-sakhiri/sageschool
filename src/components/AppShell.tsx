@@ -175,7 +175,7 @@ function Sidebar({ onNavigate }: { onNavigate: () => void }) {
           {ctx.school.name.charAt(0).toUpperCase()}
         </Box>
         <Box sx={{ minWidth: 0 }}>
-          <Typography noWrap sx={{ fontSize: 13, fontWeight: 600, color: tokens.paper }}>
+          <Typography noWrap dir="auto" sx={{ fontSize: 13, fontWeight: 600, color: tokens.paper }}>
             {ctx.school.name}
           </Typography>
           <Typography noWrap sx={{ fontSize: 11, color: tokens.sidebarMuted }}>
@@ -272,7 +272,7 @@ function UserCard() {
             {initials}
           </Avatar>
           <Box sx={{ minWidth: 0 }}>
-            <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600 }}>
+            <Typography noWrap dir="auto" sx={{ fontSize: 12.5, fontWeight: 600 }}>
               {ctx.user.full_name}
             </Typography>
             <Typography noWrap sx={{ fontSize: 11, color: tokens.sidebarMuted }}>

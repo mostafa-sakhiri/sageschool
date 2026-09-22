@@ -1,7 +1,7 @@
 import { createTheme } from '@mui/material/styles'
 import createCache from '@emotion/cache'
 import { prefixer } from 'stylis'
-import rtlPlugin from 'stylis-plugin-rtl'
+import rtlPluginModule from 'stylis-plugin-rtl'
 
 // Tokens from the mockups: warm paper ground, deep green accent, IBM Plex Sans
 // body over Newsreader display.
@@ -84,6 +84,9 @@ export function createAppTheme(direction: 'ltr' | 'rtl') {
     },
   })
 }
+
+// CJS/ESM interop: under SSR (Node) the default import is the module object.
+const rtlPlugin = ((rtlPluginModule as unknown as { default?: unknown }).default ?? rtlPluginModule) as typeof rtlPluginModule
 
 // One Emotion cache per direction: the RTL one flips every style (margins,
 // paddings, positions) through stylis-plugin-rtl.
