@@ -18,12 +18,14 @@ import { Typography } from '@mui/material'
 // write is enforced again by RLS (browser client) or by getClaims() inside the
 // server function that performs it.
 export const Route = createFileRoute('/_app')({
-  beforeLoad: async ({ location }) => {
+  beforeLoad: async ({ location, context }) => {
     const claims = await fetchClaims()
     if (!claims) throw redirect({ to: '/login', search: { redirect: location.href } })
-    return { claims }
+    // Resolve the active school up-front so child loaders can prefetch its data.
+    const session = await context.queryClient.ensureQueryData(sessionQuery(claims.sub))
+    const active = session ? resolveActive(session) : null
+    return { claims, schoolId: active?.school?.id ?? null, role: active?.member?.role ?? null }
   },
-  loader: ({ context }) => context.queryClient.ensureQueryData(sessionQuery(context.claims.sub)),
   pendingComponent: FullPageLoading,
   component: AppLayout,
 })
