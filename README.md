@@ -40,6 +40,18 @@ All passwords are `password123`.
 
 These exist only in the current local database. After `db reset`, sign up again, or run `node scripts/walkthrough.mjs`, which creates a complete school with its own accounts: `<role>.<run>@walkthrough.test`, where `<role>` is directeur, secretariat, prof1, prof2, parent.a, parent.b or eleve and `<run>` is the id shown at the top of `WALKTHROUGH.md`; all use password `password123`.
 
+### Demo preschool
+
+`node scripts/seed_preschool.mjs` creates **Jardin d'Enfants Al Amal**, with `directeur@laureats.test` as admin (switch schools from the account menu):
+- Petite, Moyenne and Grande section: one class each, 16/17/17 children, for 50 children in total.
+- The full préscolaire programme: 6 activities, 20 h/week, all hours confirmed.
+- 5 teachers, all with password `password123`:
+  - salma.idrissi@alamal.test, houda.bennani@alamal.test and nora.elfassi@alamal.test are the class teachers.
+  - khadija.amrani@alamal.test teaches Arabic.
+  - youssef.tazi@alamal.test teaches motricité and arts.
+- 44 parent accounts (6 sibling pairs).
+- A published, conflict-free timetable for every class.
+
 ## Layout
 
 - `supabase/migrations/`
