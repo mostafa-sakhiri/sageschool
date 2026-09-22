@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppClassesRouteImport } from './routes/_app/classes'
 import { Route as AppSetupRouteImport } from './routes/_app/setup'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
 
@@ -29,6 +30,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppClassesRoute = AppClassesRouteImport.update({
+  id: '/classes',
+  path: '/classes',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSetupRoute = AppSetupRouteImport.update({
   id: '/setup',
   path: '/setup',
@@ -43,11 +49,13 @@ const AppTeamRoute = AppTeamRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
+  '/classes': typeof AppClassesRoute
   '/setup': typeof AppSetupRoute
   '/team': typeof AppTeamRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/classes': typeof AppClassesRoute
   '/setup': typeof AppSetupRoute
   '/team': typeof AppTeamRoute
   '/': typeof AppIndexRoute
@@ -56,16 +64,24 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/_app/classes': typeof AppClassesRoute
   '/_app/setup': typeof AppSetupRoute
   '/_app/team': typeof AppTeamRoute
   '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/setup' | '/team'
+  fullPaths: '/' | '/login' | '/classes' | '/setup' | '/team'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/setup' | '/team' | '/'
-  id: '__root__' | '/_app' | '/login' | '/_app/setup' | '/_app/team' | '/_app/'
+  to: '/login' | '/classes' | '/setup' | '/team' | '/'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/login'
+    | '/_app/classes'
+    | '/_app/setup'
+    | '/_app/team'
+    | '/_app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -96,6 +112,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/classes': {
+      id: '/_app/classes'
+      path: '/classes'
+      fullPath: '/classes'
+      preLoaderRoute: typeof AppClassesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/setup': {
       id: '/_app/setup'
       path: '/setup'
@@ -114,12 +137,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppClassesRoute: typeof AppClassesRoute
   AppSetupRoute: typeof AppSetupRoute
   AppTeamRoute: typeof AppTeamRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppClassesRoute: AppClassesRoute,
   AppSetupRoute: AppSetupRoute,
   AppTeamRoute: AppTeamRoute,
   AppIndexRoute: AppIndexRoute,
