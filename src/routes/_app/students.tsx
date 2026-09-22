@@ -270,27 +270,14 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
       </TextField>
 
       <Divider />
-      <Typography variant="h5">{t('students.parents')}</Typography>
-      {student.guardians.length === 0 && <Typography color="text.secondary">{t('students.noParentYet')}</Typography>}
-      {student.guardians.map((g) => (
-        <Stack key={g.guardian_member_id} direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-          <Avatar sx={{ width: 30, height: 30, fontSize: 11, bgcolor: '#F7E9E2', color: '#7A4423' }}>
-            {initials(g.member?.user?.full_name ?? '?')}
-          </Avatar>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{g.member?.user?.full_name}</Typography>
-            <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted, textAlign: "start" }} dir="ltr">
-              {g.member?.user?.email}
-            </Typography>
-          </Box>
-          {g.relationship && <Tag label={t(`students.rel.${g.relationship}`)} />}
-          {g.is_payer && <Tag tone="info" label={t('students.payer')} />}
-          <Button size="small" color="error" onClick={() => unlink.mutate(g.guardian_member_id)}>
-            {t('students.unlink')}
-          </Button>
-        </Stack>
-      ))}
-
+      <Stack direction="row" sx={{ alignItems: 'center' }}>
+        <Typography variant="h5" sx={{ flex: 1 }}>
+          {t('students.parents')}
+        </Typography>
+        <Button size="small" variant="contained" startIcon={<PersonAddOutlined />} onClick={() => setInviteParent(true)}>
+          {t('students.newParent')}
+        </Button>
+      </Stack>
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Stack spacing={1.5}>
           <Stack direction="row" spacing={1.5}>
@@ -325,11 +312,29 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
               {t('students.link')}
             </Button>
           </Stack>
-          <Button variant="text" startIcon={<PersonAddOutlined />} onClick={() => setInviteParent(true)} sx={{ alignSelf: 'flex-start' }}>
-            {t('students.newParent')}
-          </Button>
         </Stack>
       </Paper>
+
+      {student.guardians.length === 0 && <Typography color="text.secondary">{t('students.noParentYet')}</Typography>}
+      {student.guardians.map((g) => (
+        <Stack key={g.guardian_member_id} direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+          <Avatar sx={{ width: 30, height: 30, fontSize: 11, bgcolor: '#F7E9E2', color: '#7A4423' }}>
+            {initials(g.member?.user?.full_name ?? '?')}
+          </Avatar>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{g.member?.user?.full_name}</Typography>
+            <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted, textAlign: "start" }} dir="ltr">
+              {g.member?.user?.email}
+            </Typography>
+          </Box>
+          {g.relationship && <Tag label={t(`students.rel.${g.relationship}`)} />}
+          {g.is_payer && <Tag tone="info" label={t('students.payer')} />}
+          <Button size="small" color="error" onClick={() => unlink.mutate(g.guardian_member_id)}>
+            {t('students.unlink')}
+          </Button>
+        </Stack>
+      ))}
+
 
       {siblings.length > 0 && (
         <>
@@ -343,18 +348,22 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
       )}
 
       <Divider />
-      <Typography variant="h5">{t('students.accessTitle')}</Typography>
+      <Stack direction="row" sx={{ alignItems: 'center' }}>
+        <Typography variant="h5" sx={{ flex: 1 }}>
+          {t('students.accessTitle')}
+        </Typography>
+        {!student.member_id && (
+          <Button size="small" variant="contained" onClick={() => setInviteStudent(true)}>
+            {t('students.enableAccess')}
+          </Button>
+        )}
+      </Stack>
       {student.member_id ? (
         <Alert severity="success">{t('students.accessOn')}</Alert>
       ) : (
-        <Stack spacing={1}>
-          <Typography color="text.secondary" sx={{ fontSize: 14 }}>
-            {t('students.accessHint')}
-          </Typography>
-          <Button variant="outlined" onClick={() => setInviteStudent(true)} sx={{ alignSelf: 'flex-start' }}>
-            {t('students.enableAccess')}
-          </Button>
-        </Stack>
+        <Typography color="text.secondary" sx={{ fontSize: 14 }}>
+          {t('students.accessHint')}
+        </Typography>
       )}
 
       <InviteDialog

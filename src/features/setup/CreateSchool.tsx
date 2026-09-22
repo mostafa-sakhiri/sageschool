@@ -131,6 +131,12 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
     const dayNames = t('setup.dayNames').split(',')
     return (
       <Stack spacing={2.5}>
+        <StepActions
+          left={t('setup.step1Foot')}
+          onNext={() => onStep(2)}
+          nextDisabled={!name.trim() || opening.days.length === 0 || perDay <= 0}
+          nextLabel={t('common.continue')}
+        />
         <Paper variant="outlined" sx={{ p: 3 }}>
           <Typography variant="h3">{t('setup.schoolTitle')}</Typography>
           <Typography color="text.secondary" sx={{ mb: 2.5, mt: 0.5 }}>
@@ -204,18 +210,21 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
             })}
           </Alert>
         </Paper>
-        <Footer
-          left={t('setup.step1Foot')}
-          onNext={() => onStep(2)}
-          nextDisabled={!name.trim() || opening.days.length === 0 || perDay <= 0}
-          nextLabel={t('common.continue')}
-        />
       </Stack>
     )
   }
 
   return (
     <Stack spacing={2.5}>
+      {!!error && <Alert severity="error">{errorMessage(error, t)}</Alert>}
+      <StepActions
+        left={t('setup.levelsCount', { n: levelCount })}
+        onBack={() => onStep(1)}
+        onNext={create}
+        nextDisabled={cycles.length === 0 || levelCount === 0}
+        busy={busy}
+        nextLabel={t('setup.createSchool')}
+      />
       <Paper variant="outlined" sx={{ p: 3 }}>
         <Typography variant="h3">{t('setup.levelsTitle')}</Typography>
         <Typography color="text.secondary" sx={{ mb: 2.5, mt: 0.5 }}>
@@ -267,15 +276,6 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
           })}
         </Stack>
       </Paper>
-      {!!error && <Alert severity="error">{errorMessage(error, t)}</Alert>}
-      <Footer
-        left={t('setup.levelsCount', { n: levelCount })}
-        onBack={() => onStep(1)}
-        onNext={create}
-        nextDisabled={cycles.length === 0 || levelCount === 0}
-        busy={busy}
-        nextLabel={t('setup.createSchool')}
-      />
     </Stack>
   )
 }
@@ -293,7 +293,7 @@ async function removeLevels(schoolId: string, codes: string[]) {
   for (const n of doomed) must(await supabase.from('curriculum_nodes').delete().eq('id', n.id))
 }
 
-export function Footer({
+export function StepActions({
   left,
   onBack,
   onNext,
@@ -310,7 +310,7 @@ export function Footer({
 }) {
   const { t } = useI18n()
   return (
-    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', pt: 1 }}>
+    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
       <Typography sx={{ flex: 1, color: tokens.inkMuted, fontSize: 13.5 }}>{left}</Typography>
       {onBack && (
         <Button variant="outlined" onClick={onBack}>

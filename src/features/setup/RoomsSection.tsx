@@ -61,39 +61,6 @@ export function RoomsSection({ schoolId }: { schoolId: string }) {
 
   return (
     <Stack spacing={2}>
-      <QueryState
-        query={rooms}
-        empty={(d) => (d.length === 0 ? <EmptyState title={t('rooms.none')} hint={t('rooms.noneHint')} /> : null)}
-      >
-        {(rows) => (
-          <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{t('common.name')}</TableCell>
-                  <TableCell>{t('rooms.capacity')}</TableCell>
-                  <TableCell>{t('rooms.usage')}</TableCell>
-                  <TableCell />
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {rows.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell sx={{ fontWeight: 600 }}>{r.name}</TableCell>
-                    <TableCell>{r.capacity ?? '—'}</TableCell>
-                    <TableCell>{subjectOf(r.id).join(', ') || t('rooms.study')}</TableCell>
-                    <TableCell align="right">
-                      <IconButton aria-label={`${t('common.delete')} ${r.name}`} onClick={() => remove.mutate(r.id)} size="small">
-                        <DeleteOutline fontSize="small" />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Paper>
-        )}
-      </QueryState>
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Stack
           component="form"
@@ -131,6 +98,39 @@ export function RoomsSection({ schoolId }: { schoolId: string }) {
           </Button>
         </Stack>
       </Paper>
+      <QueryState
+        query={rooms}
+        empty={(d) => (d.length === 0 ? <EmptyState title={t('rooms.none')} hint={t('rooms.noneHint')} /> : null)}
+      >
+        {(rows) => (
+          <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>{t('common.name')}</TableCell>
+                  <TableCell>{t('rooms.capacity')}</TableCell>
+                  <TableCell>{t('rooms.usage')}</TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell sx={{ fontWeight: 600 }}>{r.name}</TableCell>
+                    <TableCell>{r.capacity ?? '—'}</TableCell>
+                    <TableCell>{subjectOf(r.id).join(', ') || t('rooms.study')}</TableCell>
+                    <TableCell align="right">
+                      <IconButton aria-label={`${t('common.delete')} ${r.name}`} onClick={() => remove.mutate(r.id)} size="small">
+                        <DeleteOutline fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Paper>
+        )}
+      </QueryState>
       {(add.isError || remove.isError) && <Alert severity="error">{errorMessage(add.error ?? remove.error, t)}</Alert>}
     </Stack>
   )

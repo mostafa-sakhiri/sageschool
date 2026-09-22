@@ -139,6 +139,20 @@ export function YearSection({ schoolId }: { schoolId: string }) {
 
   return (
     <Stack spacing={2}>
+      {adding ? (
+        <Paper variant="outlined" sx={{ p: 2.5 }}>
+          <Typography variant="h5" sx={{ mb: 2 }}>
+            {t('year.new')}
+          </Typography>
+          <YearForm schoolId={schoolId} years={years.data ?? []} onDone={() => setAdding(false)} />
+        </Paper>
+      ) : (
+        <Box>
+          <Button variant="outlined" onClick={() => setAdding(true)}>
+            {t('year.new')}
+          </Button>
+        </Box>
+      )}
       <QueryState
         query={years}
         empty={(d) => (d.length === 0 ? <EmptyState title={t('year.none')} hint={t('year.noneHint')} /> : null)}
@@ -177,20 +191,6 @@ export function YearSection({ schoolId }: { schoolId: string }) {
         )}
       </QueryState>
       {makeCurrent.isError && <Alert severity="error">{errorMessage(makeCurrent.error, t)}</Alert>}
-      {adding ? (
-        <Paper variant="outlined" sx={{ p: 2.5 }}>
-          <Typography variant="h5" sx={{ mb: 2 }}>
-            {t('year.new')}
-          </Typography>
-          <YearForm schoolId={schoolId} years={years.data ?? []} onDone={() => setAdding(false)} />
-        </Paper>
-      ) : (
-        <Box>
-          <Button variant="outlined" onClick={() => setAdding(true)}>
-            {t('year.new')}
-          </Button>
-        </Box>
-      )}
     </Stack>
   )
 }

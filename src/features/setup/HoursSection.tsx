@@ -122,18 +122,6 @@ export function HoursSection({ schoolId, yearId }: { schoolId: string; yearId: s
       )}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '280px 1fr' } }}>
         <Paper variant="outlined" sx={{ p: 1 }}>
-          {subjectList.length === 0 && <Typography sx={{ p: 2 }}>{t('hours.noSubjects')}</Typography>}
-          <List dense sx={{ maxHeight: 460, overflowY: 'auto' }}>
-            {subjectList.map((s) => (
-              <ListItemButton key={s.id} selected={s.id === current} onClick={() => setSelected(s.id)} sx={{ borderRadius: 2 }}>
-                <ListItemText
-                  primary={s.name}
-                  secondary={t('hours.levelsCount', { n: countFor(s.id) })}
-                  slotProps={{ primary: { sx: { fontWeight: 600 } } }}
-                />
-              </ListItemButton>
-            ))}
-          </List>
           <Stack
             direction="row"
             spacing={1}
@@ -154,6 +142,18 @@ export function HoursSection({ schoolId, yearId }: { schoolId: string; yearId: s
               {t('common.add')}
             </Button>
           </Stack>
+          {subjectList.length === 0 && <Typography sx={{ p: 2 }}>{t('hours.noSubjects')}</Typography>}
+          <List dense sx={{ maxHeight: 460, overflowY: 'auto' }}>
+            {subjectList.map((s) => (
+              <ListItemButton key={s.id} selected={s.id === current} onClick={() => setSelected(s.id)} sx={{ borderRadius: 2 }}>
+                <ListItemText
+                  primary={s.name}
+                  secondary={t('hours.levelsCount', { n: countFor(s.id) })}
+                  slotProps={{ primary: { sx: { fontWeight: 600 } } }}
+                />
+              </ListItemButton>
+            ))}
+          </List>
         </Paper>
 
         <Paper variant="outlined" sx={{ p: 2 }}>

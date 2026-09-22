@@ -154,7 +154,21 @@ function RollCall() {
 
   return (
     <>
-      <PageIntro title={t('att.title')} subtitle={t('att.subtitle')} />
+      <PageIntro
+        title={t('att.title')}
+        subtitle={t('att.subtitle')}
+        actions={
+          <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending} disabled={!roster.data?.length}>
+            {t('att.save')}
+          </Button>
+        }
+      />
+      {saved && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          {t('att.saved', { date: formatDate(date, locale) })}
+        </Alert>
+      )}
+      {save.isError && <Alert severity="error" sx={{ mb: 2 }}>{errorMessage(save.error, t)}</Alert>}
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
           <TextField select label={t('students.class')} value={classId} onChange={(e) => setClassId(e.target.value)} sx={{ minWidth: 220 }}>
@@ -222,13 +236,6 @@ function RollCall() {
           </Paper>
         )}
       </QueryState>
-      <Stack direction="row" spacing={1.5} sx={{ mt: 2, alignItems: 'center' }}>
-        <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending} disabled={!roster.data?.length}>
-          {t('att.save')}
-        </Button>
-        {saved && <Typography sx={{ color: tokens.accentDark, fontSize: 14 }}>{t('att.saved', { date: formatDate(date, locale) })}</Typography>}
-      </Stack>
-      {save.isError && <Alert severity="error" sx={{ mt: 2 }}>{errorMessage(save.error, t)}</Alert>}
       {ctx.isOffice && <SchoolAbsencesOfDay date={date} />}
     </>
   )

@@ -8,7 +8,7 @@ import { PageIntro, Card, Tag } from '#/components/ui'
 import { EmptyState, Loading } from '#/components/states'
 import { SchoolContext } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
-import { CreateSchool, Footer, teachableMinutes, type Opening } from '#/features/setup/CreateSchool'
+import { CreateSchool, StepActions, teachableMinutes, type Opening } from '#/features/setup/CreateSchool'
 import { YearForm, YearSection } from '#/features/setup/YearSection'
 import { HoursSection } from '#/features/setup/HoursSection'
 import { RoomsSection } from '#/features/setup/RoomsSection'
@@ -75,6 +75,7 @@ function ContinueWizard({ step, go }: { step: number; go: (s: number) => void })
   if (step === 3) {
     return (
       <Stack spacing={2.5}>
+        {ctx.year && <StepActions onNext={() => go(4)} nextLabel={t('common.continue')} />}
         <Paper variant="outlined" sx={{ p: 3 }}>
           <Typography variant="h3">{t('setup.yearTitle')}</Typography>
           <Typography color="text.secondary" sx={{ mb: 2.5, mt: 0.5 }}>
@@ -86,13 +87,13 @@ function ContinueWizard({ step, go }: { step: number; go: (s: number) => void })
             <YearForm schoolId={ctx.school.id} onDone={() => go(4)} submitLabel={t('setup.createYear')} />
           )}
         </Paper>
-        {ctx.year && <Footer onNext={() => go(4)} nextLabel={t('common.continue')} />}
       </Stack>
     )
   }
   if (step === 4) {
     return (
       <Stack spacing={2.5}>
+        <StepActions onBack={() => go(3)} onNext={() => go(5)} nextLabel={t('common.continue')} />
         <Paper variant="outlined" sx={{ p: 3 }}>
           <Typography variant="h3">{t('setup.subjectsTitle')}</Typography>
           <Typography color="text.secondary" sx={{ mb: 2.5, mt: 0.5 }}>
@@ -100,12 +101,17 @@ function ContinueWizard({ step, go }: { step: number; go: (s: number) => void })
           </Typography>
           {ctx.year ? <HoursSection schoolId={ctx.school.id} yearId={ctx.year.id} /> : <Loading />}
         </Paper>
-        <Footer onBack={() => go(3)} onNext={() => go(5)} nextLabel={t('common.continue')} />
       </Stack>
     )
   }
   return (
     <Stack spacing={2.5}>
+      <StepActions
+        left={t('setup.finishHint')}
+        onBack={() => go(4)}
+        onNext={() => navigate({ to: '/' })}
+        nextLabel={t('setup.finish')}
+      />
       <Paper variant="outlined" sx={{ p: 3 }}>
         <Typography variant="h3">{t('setup.roomsTitle')}</Typography>
         <Typography color="text.secondary" sx={{ mb: 2.5, mt: 0.5 }}>
@@ -113,12 +119,6 @@ function ContinueWizard({ step, go }: { step: number; go: (s: number) => void })
         </Typography>
         <RoomsSection schoolId={ctx.school.id} />
       </Paper>
-      <Footer
-        left={t('setup.finishHint')}
-        onBack={() => go(4)}
-        onNext={() => navigate({ to: '/' })}
-        nextLabel={t('setup.finish')}
-      />
     </Stack>
   )
 }
