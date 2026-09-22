@@ -288,7 +288,7 @@ SELECT lives_ok($$INSERT INTO case_messages (school_id, case_id, author_member_i
 RESET ROLE;
 SELECT is((SELECT status FROM cases WHERE id = '76000000-0000-0000-0000-000000000001'), 'answered',
   'a staff reply marks the case answered');
-SELECT is((SELECT count(*) FROM notification_outbox WHERE kind = 'case_reply')::int, 1,
+SELECT is((SELECT count(*) FROM notification_outbox WHERE kind = 'case_reply' AND ref_id = '76000000-0000-0000-0000-000000000001')::int, 1,
   'the reply is stubbed to the parent in the outbox');
 SELECT pg_temp.login('pa@test.ma');
 SELECT is((SELECT count(*) FROM case_messages WHERE case_id = '76000000-0000-0000-0000-000000000001')::int, 2,

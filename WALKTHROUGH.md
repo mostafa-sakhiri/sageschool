@@ -1,6 +1,6 @@
 # Walkthrough — boucle complète sur une école neuve
 
-Généré par `node scripts/walkthrough.mjs` le 2026-09-22T03:02:51.690Z (run `muc39s23`).
+Généré par `node scripts/walkthrough.mjs` le 2026-09-22T03:09:49.751Z (run `muc3iqrh`).
 Chaque étape s'exécute **connecté en tant que l'utilisateur réel** (directeur, secrétariat, professeurs, parents, élève) via Supabase Auth : les droits appliqués sont ceux de la RLS, comme dans l'interface.
 Seule la création des comptes reproduit la fonction serveur `inviteMember` (clé secrète après vérification du rôle).
 
@@ -8,11 +8,11 @@ Seule la création des comptes reproduit la fonction serveur `inviteMember` (cl�
 
 ### 0. Le fondateur crée son compte
 
-- ✅ compte directeur.muc39s23@walkthrough.test créé et connecté (Supabase Auth, profil public.users lié par trigger)
+- ✅ compte directeur.muc3iqrh@walkthrough.test créé et connecté (Supabase Auth, profil public.users lié par trigger)
 
 ### 1. École → année scolaire → arbre du programme
 
-- ✅ école créée (1805146b-9329-43ca-9b53-795950ad2260) — le créateur est admin
+- ✅ école créée (f7e8389e-b265-4206-bff7-ea3d2151b238) — le créateur est admin
 - ✅ arbre instancié : 11 nœuds (Préscolaire 3 + Primaire 6 + 2 cycles)
 - ✅ année 2026-2027 en cours ; 19 lignes d'horaires par défaut appliquées (statut « proposé »)
 - ✅ 19 horaires confirmés par l'école

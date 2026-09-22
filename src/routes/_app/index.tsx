@@ -5,7 +5,7 @@ import WarningAmberOutlined from '@mui/icons-material/WarningAmberOutlined'
 import CheckOutlined from '@mui/icons-material/CheckOutlined'
 import { AppShell } from '#/components/AppShell'
 import { Card, PageIntro, SectionTitle, StatCard, Tag, fullName, initials } from '#/components/ui'
-import { Loading } from '#/components/states'
+import { ErrorState, Loading } from '#/components/states'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
@@ -109,6 +109,7 @@ function OfficeDash() {
       <TodoList items={[{ key: 'year', title: t('year.none'), detail: t('year.noneHint'), to: '/setup', action: t('dash.createYear'), urgent: true }]} />
     )
   if (students.isPending || classes.isPending) return <Loading rows={5} />
+  if (students.isError || classes.isError) return <ErrorState error={students.error ?? classes.error} onRetry={() => (students.refetch(), classes.refetch())} />
 
   const studentRows = students.data ?? []
   const classRows = classes.data ?? []
@@ -217,7 +218,7 @@ function TeacherDash() {
             {t('dash.rollCall')}
           </Button>
         </Stack>
-        {sessions.isPending ? <Loading rows={3} /> : <SessionList sessions={sessions.data ?? []} classNames={classNames} />}
+        {sessions.isPending ? <Loading rows={3} /> : sessions.isError ? <ErrorState error={sessions.error} onRetry={() => sessions.refetch()} /> : <SessionList sessions={sessions.data ?? []} classNames={classNames} />}
       </Card>
       <Stack spacing={2}>
         <Card>
@@ -283,6 +284,7 @@ function ParentDash() {
   })
 
   if (kids.isPending) return <Loading rows={4} />
+  if (kids.isError) return <ErrorState error={kids.error} onRetry={() => kids.refetch()} />
   const due = (balances.data ?? []).filter((b) => ['overdue', 'partial', 'pending'].includes(b.payment_status))
   const next = due[0]
   const answered = (cases.data ?? []).filter((c) => c.status === 'answered')
@@ -369,6 +371,7 @@ function StudentDash() {
   const upcoming = (homework.data ?? []).filter((h) => !h.due_on || h.due_on >= today).slice(0, 4)
 
   if (me.isPending) return <Loading rows={4} />
+  if (me.isError) return <ErrorState error={me.error} onRetry={() => me.refetch()} />
   return (
     <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '3fr 2fr' } }}>
       <Card>

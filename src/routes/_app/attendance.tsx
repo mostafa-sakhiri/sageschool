@@ -25,7 +25,7 @@ import {
 } from '@mui/material'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, StatCard, Tag, fullName, initials, type Tone } from '#/components/ui'
-import { EmptyState, Loading, QueryState } from '#/components/states'
+import { EmptyState, ErrorState, Loading, QueryState } from '#/components/states'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
@@ -149,6 +149,7 @@ function RollCall() {
 
   if (!ctx.year) return <EmptyState title={t('year.none')} />
   if (classes.isPending) return <Loading rows={5} />
+  if (classes.isError) return <ErrorState error={classes.error} onRetry={() => classes.refetch()} />
   if (!classes.data?.length) return <EmptyState title={ctx.role === 'teacher' ? t('att.noTeacherClass') : t('tt.noClasses')} />
 
   return (

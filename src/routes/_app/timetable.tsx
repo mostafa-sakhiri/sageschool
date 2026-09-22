@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { MenuItem, Stack, Tab, Tabs, TextField, Typography } from '@mui/material'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, fullName } from '#/components/ui'
-import { EmptyState, Loading } from '#/components/states'
+import { EmptyState, ErrorState, Loading } from '#/components/states'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { addDays, formatDate, mondayOf, todayIso } from '#/lib/format'
@@ -46,6 +46,7 @@ function OfficeView() {
 
   if (!ctx.year) return <EmptyState title={t('year.none')} hint={t('year.noneHint')} />
   if (classes.isPending) return <Loading rows={5} />
+  if (classes.isError) return <ErrorState error={classes.error} onRetry={() => classes.refetch()} />
   if (!classes.data?.length) return <EmptyState title={t('tt.noClasses')} hint={t('tt.noClassesHint')} />
 
   return (
@@ -93,6 +94,7 @@ function FamilyView() {
   const classId = current ? currentEnrollment(current, ctx.year?.id)?.class_id : undefined
 
   if (students.isPending) return <Loading rows={5} />
+  if (students.isError) return <ErrorState error={students.error} onRetry={() => students.refetch()} />
   if (!current || !classId) return <EmptyState title={t('tt.noChildClass')} />
   return (
     <>
@@ -148,6 +150,8 @@ function TeacherView() {
         <WeekNav monday={monday} onChange={setMonday} />
         {week.isPending ? (
           <Loading rows={4} />
+        ) : week.isError ? (
+          <ErrorState error={week.error} onRetry={() => week.refetch()} />
         ) : (
           <WeekGrid days={days} dayLabels={labels} blocks={blocks} dayStart={start} dayEnd={end} emptyText={t('tt.noSessions')} />
         )}

@@ -23,7 +23,7 @@ import { errorMessage, must } from '#/lib/errors'
 import { formatDate, hhmm, todayIso } from '#/lib/format'
 import { formatMinutes, roomsQuery, subjectsQuery } from '#/features/structure/api'
 import { assignmentsQuery, requiredHoursQuery, teachersQuery } from '#/features/classes/api'
-import { EmptyState, Loading } from '#/components/states'
+import { EmptyState, ErrorState, Loading } from '#/components/states'
 import { Tag } from '#/components/ui'
 import { WeekGrid, type Block } from './WeekGrid'
 import { membersNamesQuery, slotsQuery, subjectColor, versionsQuery, type Slot, type Version } from './api'
@@ -90,6 +90,7 @@ export function Builder({ classId }: { classId: string }) {
   })
 
   if (versions.isPending) return <Loading rows={5} />
+  if (versions.isError) return <ErrorState error={versions.error} onRetry={() => versions.refetch()} />
   if (!list.length)
     return (
       <EmptyState
@@ -193,6 +194,7 @@ function VersionEditor({ classId, version }: { classId: string; version: Version
   }, [slots.data])
 
   if (slots.isPending) return <Loading rows={4} />
+  if (slots.isError) return <ErrorState error={slots.error} onRetry={() => slots.refetch()} />
 
   const blocks: Block[] = (slots.data ?? []).map((s) => ({
     key: s.id,
