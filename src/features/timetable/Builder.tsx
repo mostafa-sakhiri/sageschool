@@ -171,7 +171,7 @@ function StatusTag({ v }: { v: Version }) {
 }
 
 function VersionEditor({ classId, version }: { classId: string; version: Version }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const ctx = useSchool()
   const { days, start, end } = useSchoolDays()
   const slots = useQuery(slotsQuery(ctx.school.id, version.id))
@@ -229,7 +229,7 @@ function VersionEditor({ classId, version }: { classId: string; version: Version
                 <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
                   <Typography sx={{ fontSize: 13, fontWeight: 500 }}>{subjectName(r.subject_id)}</Typography>
                   <Typography sx={{ fontSize: 12.5, color: p >= (r.weekly_minutes ?? 0) ? tokens.accentDark : tokens.inkMuted }}>
-                    {formatMinutes(p)} / {formatMinutes(r.weekly_minutes ?? 0)}
+                    {formatMinutes(p, locale)} / {formatMinutes(r.weekly_minutes ?? 0, locale)}
                   </Typography>
                 </Stack>
                 <LinearProgress variant="determinate" value={pct} sx={{ height: 5, borderRadius: 3, mt: 0.5 }} />

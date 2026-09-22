@@ -309,7 +309,7 @@ function ClassNameField({ cls, disabled, onSave }: { cls: ClassRow; disabled: bo
 // "Qui enseigne quoi" for one class: the weekly hours it inherits from its
 // level, and the teacher assigned to each subject.
 function ClassDetail({ cls, onClose }: { cls: ClassRow; onClose: () => void }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
   const hours = useQuery(requiredHoursQuery(ctx.school.id, cls.id))
@@ -344,7 +344,7 @@ function ClassDetail({ cls, onClose }: { cls: ClassRow; onClose: () => void }) {
         <Box sx={{ flex: 1 }}>
           <Typography variant="h3">{cls.name}</Typography>
           <Typography color="text.secondary">
-            {t('classes.weeklyTotal', { total: formatMinutes(totalMin), n: hours.data?.length ?? 0 })}
+            {t('classes.weeklyTotal', { total: formatMinutes(totalMin, locale), n: hours.data?.length ?? 0 })}
           </Typography>
         </Box>
         <IconButton aria-label={t('common.close')} onClick={onClose}>
@@ -374,7 +374,7 @@ function ClassDetail({ cls, onClose }: { cls: ClassRow; onClose: () => void }) {
                 return (
                   <TableRow key={h.subject_id}>
                     <TableCell sx={{ fontWeight: 500 }}>{subjectName(h.subject_id!)}</TableCell>
-                    <TableCell>{formatMinutes(h.weekly_minutes ?? 0)}</TableCell>
+                    <TableCell>{formatMinutes(h.weekly_minutes ?? 0, locale)}</TableCell>
                     <TableCell>
                       <TextField
                         select

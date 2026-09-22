@@ -79,7 +79,7 @@ function TodoList({ items }: { items: Todo[] }) {
 }
 
 function OfficeDash() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const ctx = useSchool()
   const students = useQuery(studentsQuery(ctx.school.id))
   const classes = useQuery({ ...classesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year })
@@ -127,7 +127,7 @@ function OfficeDash() {
     ...(unplaced.length ? [{ key: 'unplaced', title: t('dash.unplaced', { n: unplaced.length }), detail: unplaced.slice(0, 2).map((s) => fullName(s)).join(', '), to: '/students', action: t('dash.place') }] : []),
     ...(noParent.length ? [{ key: 'parents', title: t('dash.noParent', { n: noParent.length }), to: '/students', action: t('dash.link') }] : []),
     ...(overdue.length
-      ? [{ key: 'fees', title: t('dash.overdue', { n: overdue.length }), detail: formatMoney(overdue.reduce((s, b) => s + Number(b.amount_remaining), 0), 'fr'), to: '/fees', action: t('dash.seeFees') }]
+      ? [{ key: 'fees', title: t('dash.overdue', { n: overdue.length }), detail: formatMoney(overdue.reduce((s, b) => s + Number(b.amount_remaining), 0), locale), to: '/fees', action: t('dash.seeFees') }]
       : []),
   ]
   const enrolled = studentRows.filter((s) => currentEnrollment(s, ctx.year?.id)).length

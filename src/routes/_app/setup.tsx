@@ -152,7 +152,7 @@ function Settings() {
 }
 
 function SchoolInfo() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const ctx = useContext(SchoolContext)!
   const s = ctx.school.settings as { city?: string; address?: string; opening?: Opening; levels_offered?: string[] }
   const o = s.opening
@@ -176,7 +176,7 @@ function SchoolInfo() {
           <Info label={t('setup.period.day')} value={`${o.day[0]} → ${o.day[1]}`} />
           <Info label={t('setup.period.lunch')} value={`${o.lunch[0]} → ${o.lunch[1]}`} />
           <Info label={t('setup.period.recess')} value={`${o.recess[0]} → ${o.recess[1]}`} />
-          <Info label={t('settings.teachablePerWeek')} value={formatMinutes(teachableMinutes(o) * o.days.length)} />
+          <Info label={t('settings.teachablePerWeek')} value={formatMinutes(teachableMinutes(o) * o.days.length, locale)} />
         </Card>
       )}
     </Box>

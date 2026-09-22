@@ -127,9 +127,12 @@ export function nodeLabel(n: Node, all: Node[], locale: Locale) {
   return shown.map((x) => nodeName(x, locale)).join(' › ')
 }
 
-export function formatMinutes(m: number) {
+// Durations with localized units: "1 h 30" / "1 س 30 د".
+export function formatMinutes(m: number, locale: Locale = 'fr') {
   const h = Math.floor(m / 60)
   const r = m % 60
-  if (!h) return `${r} min`
-  return r ? `${h} h ${String(r).padStart(2, '0')}` : `${h} h`
+  const [H, M] = locale === 'ar' ? ['س', 'د'] : ['h', 'min']
+  if (!h) return `${r} ${M}`
+  if (!r) return `${h} ${H}`
+  return locale === 'ar' ? `${h} ${H} ${r} ${M}` : `${h} ${H} ${String(r).padStart(2, '0')}`
 }

@@ -198,9 +198,9 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
           ))}
           <Alert severity="success" icon={false} sx={{ mt: 1, bgcolor: tokens.accentSoft, color: tokens.accentDark }}>
             {t('setup.teachable', {
-              perDay: formatMinutes(perDay),
+              perDay: formatMinutes(perDay, locale),
               days: opening.days.length,
-              total: formatMinutes(perDay * opening.days.length),
+              total: formatMinutes(perDay * opening.days.length, locale),
             })}
           </Alert>
         </Paper>
