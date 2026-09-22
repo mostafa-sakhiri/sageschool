@@ -42,10 +42,11 @@ export function I18nProvider({ initial, children }: { initial: Locale; children:
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }
 
+// Outside the provider (root error/not-found boundaries): French, LTR.
+const fallback: I18n = { locale: 'fr', dir: 'ltr', setLocale: () => {}, t: (k, v) => translate('fr', k, v) }
+
 export function useI18n() {
-  const ctx = useContext(I18nContext)
-  if (!ctx) throw new Error('useI18n outside I18nProvider')
-  return ctx
+  return useContext(I18nContext) ?? fallback
 }
 
 export const useT = () => useI18n().t

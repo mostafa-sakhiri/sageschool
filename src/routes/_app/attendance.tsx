@@ -118,8 +118,8 @@ function RollCall() {
     const m: Record<string, Status> = {}
     for (const r of existing.data ?? []) m[r.student_id] = r.status as Status
     setMarks(m)
-    setSaved(false)
   }, [existing.data])
+  useEffect(() => setSaved(false), [classId, date, slotKey])
 
   const save = useMutation({
     mutationFn: async () => {
