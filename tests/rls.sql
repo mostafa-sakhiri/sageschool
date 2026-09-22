@@ -1,0 +1,1 @@
+../supabase/tests/rls.test.sql
