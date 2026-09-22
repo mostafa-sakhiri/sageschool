@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppAnnouncementsRouteImport } from './routes/_app/announcements'
 import { Route as AppClassesRouteImport } from './routes/_app/classes'
+import { Route as AppFeesRouteImport } from './routes/_app/fees'
 import { Route as AppSetupRouteImport } from './routes/_app/setup'
 import { Route as AppStudentsRouteImport } from './routes/_app/students'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
@@ -32,9 +34,19 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAnnouncementsRoute = AppAnnouncementsRouteImport.update({
+  id: '/announcements',
+  path: '/announcements',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppClassesRoute = AppClassesRouteImport.update({
   id: '/classes',
   path: '/classes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFeesRoute = AppFeesRouteImport.update({
+  id: '/fees',
+  path: '/fees',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSetupRoute = AppSetupRouteImport.update({
@@ -61,7 +73,9 @@ const AppTimetableRoute = AppTimetableRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
+  '/announcements': typeof AppAnnouncementsRoute
   '/classes': typeof AppClassesRoute
+  '/fees': typeof AppFeesRoute
   '/setup': typeof AppSetupRoute
   '/students': typeof AppStudentsRoute
   '/team': typeof AppTeamRoute
@@ -69,7 +83,9 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/announcements': typeof AppAnnouncementsRoute
   '/classes': typeof AppClassesRoute
+  '/fees': typeof AppFeesRoute
   '/setup': typeof AppSetupRoute
   '/students': typeof AppStudentsRoute
   '/team': typeof AppTeamRoute
@@ -80,7 +96,9 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/_app/announcements': typeof AppAnnouncementsRoute
   '/_app/classes': typeof AppClassesRoute
+  '/_app/fees': typeof AppFeesRoute
   '/_app/setup': typeof AppSetupRoute
   '/_app/students': typeof AppStudentsRoute
   '/_app/team': typeof AppTeamRoute
@@ -92,7 +110,9 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/announcements'
     | '/classes'
+    | '/fees'
     | '/setup'
     | '/students'
     | '/team'
@@ -100,7 +120,9 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/announcements'
     | '/classes'
+    | '/fees'
     | '/setup'
     | '/students'
     | '/team'
@@ -110,7 +132,9 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/login'
+    | '/_app/announcements'
     | '/_app/classes'
+    | '/_app/fees'
     | '/_app/setup'
     | '/_app/students'
     | '/_app/team'
@@ -146,11 +170,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/announcements': {
+      id: '/_app/announcements'
+      path: '/announcements'
+      fullPath: '/announcements'
+      preLoaderRoute: typeof AppAnnouncementsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/classes': {
       id: '/_app/classes'
       path: '/classes'
       fullPath: '/classes'
       preLoaderRoute: typeof AppClassesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/fees': {
+      id: '/_app/fees'
+      path: '/fees'
+      fullPath: '/fees'
+      preLoaderRoute: typeof AppFeesRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/setup': {
@@ -185,7 +223,9 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppAnnouncementsRoute: typeof AppAnnouncementsRoute
   AppClassesRoute: typeof AppClassesRoute
+  AppFeesRoute: typeof AppFeesRoute
   AppSetupRoute: typeof AppSetupRoute
   AppStudentsRoute: typeof AppStudentsRoute
   AppTeamRoute: typeof AppTeamRoute
@@ -194,7 +234,9 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAnnouncementsRoute: AppAnnouncementsRoute,
   AppClassesRoute: AppClassesRoute,
+  AppFeesRoute: AppFeesRoute,
   AppSetupRoute: AppSetupRoute,
   AppStudentsRoute: AppStudentsRoute,
   AppTeamRoute: AppTeamRoute,
