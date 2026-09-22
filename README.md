@@ -24,6 +24,7 @@ npm run typecheck                 # TypeScript
 npm run test:rls                  # pgTAP: 48 RLS isolation assertions (supabase/tests/rls.test.sql)
 node scripts/walkthrough.mjs      # full core loop on a fresh school, as real users → WALKTHROUGH.md
 npm run i18n:check                # every t('key') exists in fr.json and ar.json
+npm run test:import               # Excel import formats: templates, parsing, validation
 npm run build                     # production build
 ```
 
@@ -51,6 +52,15 @@ These exist only in the current local database. After `db reset`, sign up again,
   - youssef.tazi@alamal.test teaches motricité and arts.
 - 44 parent accounts (6 sibling pairs).
 - A published, conflict-free timetable for every class.
+
+### Importing people (Excel)
+
+Onboarding step 6 "Données", Équipe › Importer, Élèves › Importer, or the "+ Nouveau" menu. Download a template, fill it in, and drop it back:
+- `professeurs.xlsx`: one teacher account per row.
+- `administration.xlsx`: "Direction" gives admin access; any other function gives secrétariat access.
+- `eleves.xlsx`: students, their class, and up to two parents. Siblings are recognized by the parent's e-mail or phone.
+
+Nothing is saved before the per-row preview is confirmed. Temporary passwords come back as `identifiants.xlsx`.
 
 ## Layout
 

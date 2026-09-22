@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -38,9 +38,13 @@ import { classesQuery } from '#/features/classes/api'
 import { currentEnrollment, parentsQuery, studentsQuery, type StudentRow } from '#/features/students/api'
 import { InviteDialog } from '#/features/team/InviteDialog'
 import { AddStudentDialog } from '#/features/students/AddStudentDialog'
+import { ImportDialog } from '#/features/import/ImportZone'
+import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
 import { tokens } from '#/theme/theme'
 
 export const Route = createFileRoute('/_app/students')({
+  // ?import=1 opens the Excel import (quick actions)
+  validateSearch: (s: Record<string, unknown>): { import?: boolean } => ({ import: s.import === true || s.import === 1 || s.import === '1' || undefined }),
   loader: ({ context }) => context.schoolId && context.queryClient.prefetchQuery(studentsQuery(context.schoolId)),
   component: StudentsPage,
 })
@@ -52,6 +56,14 @@ function StudentsPage() {
   const [search, setSearch] = useState('')
   const [adding, setAdding] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
+  const { import: openImport } = Route.useSearch()
+  const navigateSelf = Route.useNavigate()
+  const [importing, setImporting] = useState(false)
+  useEffect(() => {
+    if (!openImport) return
+    setImporting(true)
+    navigateSelf({ search: {}, replace: true })
+  }, [openImport, navigateSelf])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -67,9 +79,14 @@ function StudentsPage() {
         title={t('students.title')}
         subtitle={t('students.subtitle', { n: students.data?.length ?? 0 })}
         actions={
-          <Button variant="contained" startIcon={<PersonAddOutlined />} onClick={() => setAdding(true)}>
-            {t('students.add')}
-          </Button>
+          <>
+            <Button variant="outlined" startIcon={<UploadFileOutlined />} onClick={() => setImporting(true)}>
+              {t('import.button')}
+            </Button>
+            <Button variant="contained" startIcon={<PersonAddOutlined />} onClick={() => setAdding(true)}>
+              {t('students.add')}
+            </Button>
+          </>
         }
       />
       {unplaced > 0 && (
@@ -160,6 +177,7 @@ function StudentsPage() {
           </Paper>
         )}
       </QueryState>
+      <ImportDialog open={importing} onClose={() => setImporting(false)} kinds={['students']} title={t('import.studentsTitle')} />
       <AddStudentDialog open={adding} onClose={() => setAdding(false)} onCreated={(id) => setOpenId(id)} />
       <Drawer
         anchor="right"

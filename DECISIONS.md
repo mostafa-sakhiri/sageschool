@@ -74,3 +74,19 @@ Auto-generated names such as "1ère année primaire A", "Rentrée 2026-2027" or 
 - **Mixed-direction text:** user-entered content (names, messages, announcement and homework text) is rendered with `dir="auto"`, so French text inside the Arabic UI keeps its punctuation and truncation in the right place.
 - **Formatting:** dates and money use `ar-MA` with Latin digits (`-u-nu-latn`), which is common Moroccan usage. Durations are localized: "1 س 30 د".
 - **Drawers:** they use logical anchors. MUI flips `left`/`right` itself under an RTL theme.
+
+## D-016 — Importing people from Excel (onboarding and afterwards)
+- **Where:** the installation wizard gets a 6th, optional step called "Données", following mockup W4 (download a template, drop it, see what was read, then import). The same drop zones are available from Équipe › Importer, Élèves › Importer, and the sidebar's "+ Nouveau" menu.
+- **Three files instead of two:** the mockup had professeurs and administration, and put students at year creation. The request explicitly included students, so there's a third file, "élèves et parents". It imports into the school year currently being viewed.
+- **Format:** each template has the sheet to fill, an "Exemple" sheet that is never imported, a "Mode d'emploi" sheet, and, for students, a "Classes" sheet listing the school's real levels and classes. When reading a file:
+  - Headers are matched loosely: case, accents and punctuation are ignored, some synonyms and Arabic headers are accepted.
+  - Excel and CSV files (commas or semicolons) are both accepted.
+  - Dates can be DD/MM/YYYY or real Excel dates.
+  - Moroccan phone numbers are normalized to +212.
+- **Checks:** validation runs in the browser before anything is saved. Rows are marked in error, with a remark, or already known; errors and already-known rows are not sent. The server checks again: import is idempotent by Massar code or first name + last name + birth date for students, and by e-mail and role for staff.
+- **Parents:** siblings are recognized when their parent has the same e-mail or phone. A parent with an e-mail gets a login. A parent with only a phone gets a `users` record with status `invited` and no login, which is the schema's case for a user without an account (still reachable by WhatsApp).
+- **Classes:** a class that doesn't exist yet is created under its level, but only for an admin. Staff (secrétariat) can import only into existing classes, matching the RLS rules.
+- **Rights and writes:** the server function `importMembers` checks the caller with `getClaims()` and reads their role through RLS. Staff import requires admin; student import requires admin or staff. Logins and memberships are created with the secret key. Students, enrolments, classes and guardian links are written with the caller's own session, so RLS still applies.
+- **Temporary passwords** are returned once, as an `identifiants.xlsx` download.
+- **Destination banner:** every import zone shows the school and year it writes into. This was added after a test import went into the wrong school because the browser was signed in to another account.
+- **Excel library:** SheetJS 0.20.3, pinned from its official distribution (cdn.sheetjs.com). The copy on npm is stuck at 0.18.5.

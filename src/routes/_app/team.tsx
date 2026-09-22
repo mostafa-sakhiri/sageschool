@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   Avatar,
@@ -27,29 +27,15 @@ import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
 import { errorMessage, must } from '#/lib/errors'
 import { InviteDialog } from '#/features/team/InviteDialog'
+import { membersQuery, type MemberRow } from '#/features/team/api'
+import { ImportDialog } from '#/features/import/ImportZone'
+import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
 import { tokens } from '#/theme/theme'
 
-export type MemberRow = {
-  id: string
-  role: Role
-  status: 'active' | 'inactive'
-  user: { id: string; full_name: string; email: string | null; phone: string | null } | null
-}
-
-export const membersQuery = (schoolId: string) =>
-  queryOptions({
-    queryKey: ['school', schoolId, 'members'],
-    queryFn: async () =>
-      must(
-        await supabase
-          .from('school_members')
-          .select('id, role, status, user:users(id, full_name, email, phone)')
-          .eq('school_id', schoolId)
-          .order('created_at'),
-      ) as unknown as MemberRow[],
-  })
 
 export const Route = createFileRoute('/_app/team')({
+  // ?import=1 opens the Excel import (quick actions)
+  validateSearch: (s: Record<string, unknown>): { import?: boolean } => ({ import: s.import === true || s.import === 1 || s.import === '1' || undefined }),
   // Loader prefetch: the list is in cache before the page renders.
   loader: ({ context }) => context.schoolId && context.queryClient.prefetchQuery(membersQuery(context.schoolId)),
   component: TeamPage,
@@ -65,6 +51,14 @@ function TeamPage() {
   const members = useQuery(membersQuery(ctx.school.id))
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<(typeof TABS)[number]>('staff')
+  const search = Route.useSearch()
+  const navigateSelf = Route.useNavigate()
+  const [importing, setImporting] = useState(false)
+  useEffect(() => {
+    if (!search.import) return
+    setImporting(true)
+    navigateSelf({ search: {}, replace: true })
+  }, [search.import, navigateSelf])
 
   const toggle = useMutation({
     mutationFn: async (m: MemberRow) =>
@@ -83,9 +77,14 @@ function TeamPage() {
         title={t('team.title')}
         subtitle={t('team.subtitle')}
         actions={
-          <Button variant="contained" startIcon={<PersonAddOutlined />} onClick={() => setOpen(true)}>
-            {t('team.add')}
-          </Button>
+          <>
+            <Button variant="outlined" startIcon={<UploadFileOutlined />} onClick={() => setImporting(true)}>
+              {t('import.button')}
+            </Button>
+            <Button variant="contained" startIcon={<PersonAddOutlined />} onClick={() => setOpen(true)}>
+              {t('team.add')}
+            </Button>
+          </>
         }
       />
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, borderBottom: `1px solid ${tokens.line}` }}>
@@ -150,6 +149,7 @@ function TeamPage() {
           {t('team.footnote')}
         </Typography>
       </Box>
+      <ImportDialog open={importing} onClose={() => setImporting(false)} kinds={['teachers', 'administration']} title={t('import.staffTitle')} />
       <InviteDialog
         open={open}
         onClose={() => setOpen(false)}

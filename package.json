@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test:rls": "supabase test db",
-    "i18n:check": "python3 scripts/i18n_check.py"
+    "i18n:check": "python3 scripts/i18n_check.py",
+    "test:import": "tsx scripts/test_import_formats.ts"
   },
   "repository": {
     "type": "git",
@@ -29,6 +30,7 @@
     "@types/stylis": "4.2.7",
     "@vitejs/plugin-react": "6.0.1",
     "supabase": "2.117.0",
+    "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vite": "8.3.0"
   },
@@ -51,6 +53,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "stylis": "4.3.6",
-    "stylis-plugin-rtl": "2.1.1"
+    "stylis-plugin-rtl": "2.1.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }

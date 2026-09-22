@@ -12,6 +12,7 @@ import { CreateSchool, StepActions, teachableMinutes, type Opening } from '#/fea
 import { YearForm, YearSection } from '#/features/setup/YearSection'
 import { HoursSection } from '#/features/setup/HoursSection'
 import { RoomsSection } from '#/features/setup/RoomsSection'
+import { ImportPanel } from '#/features/import/ImportZone'
 import { formatMinutes, nodeName, nodesQuery } from '#/features/structure/api'
 import { tokens } from '#/theme/theme'
 
@@ -27,7 +28,7 @@ export const Route = createFileRoute('/_app/setup')({
   component: SetupPage,
 })
 
-const STEPS = ['setup.steps.school', 'setup.steps.levels', 'setup.steps.year', 'setup.steps.subjects', 'setup.steps.rooms']
+const STEPS = ['setup.steps.school', 'setup.steps.levels', 'setup.steps.year', 'setup.steps.subjects', 'setup.steps.rooms', 'setup.steps.data']
 
 function SetupPage() {
   const ctx = useContext(SchoolContext)
@@ -104,13 +105,32 @@ function ContinueWizard({ step, go }: { step: number; go: (s: number) => void })
       </Stack>
     )
   }
+  if (step === 6) {
+    return (
+      <Stack spacing={2.5}>
+        <StepActions
+          left={t('setup.finishHint')}
+          onBack={() => go(5)}
+          onNext={() => navigate({ to: '/' })}
+          nextLabel={t('setup.finish')}
+        />
+        <Paper variant="outlined" sx={{ p: 3 }}>
+          <Typography variant="h3">{t('setup.dataTitle')}</Typography>
+          <Typography color="text.secondary" sx={{ mb: 2.5, mt: 0.5 }}>
+            {t('setup.dataHint')}
+          </Typography>
+          <ImportPanel kinds={['teachers', 'administration', 'students']} />
+        </Paper>
+      </Stack>
+    )
+  }
   return (
     <Stack spacing={2.5}>
       <StepActions
-        left={t('setup.finishHint')}
+        left={t('setup.roomsFoot')}
         onBack={() => go(4)}
-        onNext={() => navigate({ to: '/' })}
-        nextLabel={t('setup.finish')}
+        onNext={() => go(6)}
+        nextLabel={t('common.continue')}
       />
       <Paper variant="outlined" sx={{ p: 3 }}>
         <Typography variant="h3">{t('setup.roomsTitle')}</Typography>
