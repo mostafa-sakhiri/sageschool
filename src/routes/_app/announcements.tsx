@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   Autocomplete,
@@ -31,30 +31,9 @@ import { formatDateTime } from '#/lib/format'
 import { classesQuery } from '#/features/classes/api'
 import { nodeLabel, nodesQuery } from '#/features/structure/api'
 import { tokens } from '#/theme/theme'
+import { announcementsQuery, type Announcement } from '#/features/queries'
 
-type Announcement = {
-  id: string
-  title: string
-  body: string
-  priority: 'normal' | 'important' | 'urgent'
-  status: 'draft' | 'published'
-  published_at: string | null
-  created_at: string
-  targets: { class_id: string | null; node_id: string | null }[]
-}
 
-export const announcementsQuery = (schoolId: string) =>
-  queryOptions({
-    queryKey: ['school', schoolId, 'announcements'],
-    queryFn: async () =>
-      must(
-        await supabase
-          .from('announcements')
-          .select('id, title, body, priority, status, published_at, created_at, targets:announcement_targets(class_id, node_id)')
-          .eq('school_id', schoolId)
-          .order('created_at', { ascending: false }),
-      ) as unknown as Announcement[],
-  })
 
 export const Route = createFileRoute('/_app/announcements')({
   loader: ({ context }) => context.schoolId && context.queryClient.prefetchQuery(announcementsQuery(context.schoolId)),

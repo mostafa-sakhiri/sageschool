@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   Box,
@@ -34,30 +34,8 @@ import { nodeLabel, nodesQuery } from '#/features/structure/api'
 import { classesQuery } from '#/features/classes/api'
 import { currentEnrollment, studentsQuery } from '#/features/students/api'
 import { tokens } from '#/theme/theme'
+import { balancesQuery, type Balance } from '#/features/queries'
 
-type Balance = {
-  id: string
-  student_id: string
-  label: string
-  due_on: string
-  amount_due: number
-  amount_paid: number
-  amount_remaining: number
-  payment_status: 'paid' | 'partial' | 'pending' | 'overdue' | 'cancelled'
-}
-
-export const balancesQuery = (schoolId: string, yearId: string) =>
-  queryOptions({
-    queryKey: ['school', schoolId, 'balances', yearId],
-    queryFn: async () =>
-      must(
-        await supabase
-          .from('installment_balances')
-          .select('id, student_id, label, due_on, amount_due, amount_paid, amount_remaining, payment_status')
-          .eq('academic_year_id', yearId)
-          .order('due_on'),
-      ) as Balance[],
-  })
 
 export const Route = createFileRoute('/_app/fees')({ component: FeesPage })
 
