@@ -128,7 +128,7 @@ function ClassesPage() {
         </Box>
       )}
       <Drawer
-        anchor={locale === 'ar' ? 'left' : 'right'}
+        anchor="right"
         open={!!openClass}
         onClose={() => setOpenClass(null)}
         slotProps={{ paper: { sx: { width: { xs: '100%', sm: 560 }, p: 3 } } }}

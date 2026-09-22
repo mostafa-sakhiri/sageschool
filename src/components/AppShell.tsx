@@ -78,7 +78,7 @@ export function AppShell({ title, children }: { title?: string; children: React.
         <Drawer
           open={open}
           onClose={() => setOpen(false)}
-          anchor={theme.direction === 'rtl' ? 'right' : 'left'}
+          anchor="left"
           slotProps={{ paper: { sx: { width: SIDEBAR_WIDTH, border: 0 } } }}
         >
           {sidebar}
