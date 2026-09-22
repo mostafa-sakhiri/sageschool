@@ -43,3 +43,34 @@ TanStack Start renders the document shell on the server: `<html lang dir>` comes
 
 ## D-007 — The RLS test lives under `supabase/tests/`
 `supabase test db` runs pgTAP files from `supabase/tests/`. The brief asks for `tests/rls.sql`, so that path is a symlink to `supabase/tests/rls.test.sql`. Run it with `npm run test:rls`.
+
+## D-008 — Team and family accounts are created with a temporary password (no invitation e-mail)
+Everything runs locally, so no e-mail is ever sent. The `inviteMember` server function works in this order:
+1. It checks the caller with `getClaims()`.
+2. It reads the caller's role in that school through RLS. An admin can add any role; staff can add only parents and students.
+3. Only then does it use the secret key to create the Auth account and the membership.
+The temporary password is shown once for the office to hand over. If the e-mail already belongs to an account, that account is reused and the new role is simply added (for example, a teacher who is also a parent).
+
+## D-009 — The wizard follows the mockups, except the year comes before subjects
+The mockups install the school in five steps: école › niveaux › matières › salles › données. The schema, however, stores weekly hours per academic year (`node_subject_hours.academic_year_id`), so hours can't exist before a year does. The wizard is therefore: **école › niveaux › année scolaire › matières/horaires › salles**. The mockups' optional step 5 (Excel import) is out of scope, as are the AI assistant features.
+
+## D-010 — What an absence is attached to, and who can record it
+An absence can be recorded against a timetable slot (`slot_id`) or, when the class has no published timetable, against the whole day. Recording is limited to the class's teachers and to the office. The roll-call screen assumes everyone is present by default, per the mockups. Saving an absence or lateness writes a stubbed WhatsApp message to the outbox.
+
+## D-011 — Only teachers write homework
+The schema requires `homework.author_role = 'teacher'`, so admins can't post homework in their admin capacity. The Homework page appears in the navigation for teachers, parents and students only.
+
+## D-012 — Payment status keeps the schema's precedence
+`installment_balances` puts `overdue` ahead of `partial`: an installment past its due date and only partly paid shows as "en retard", with the amount paid and the remainder displayed next to it. That's the validated view, so I left it unchanged.
+
+## D-013 — Announcements are published through an RPC
+Targets are inserted after the announcement row, so publishing happens in a separate step. `publish_announcement()` sets the status to published and creates one stubbed WhatsApp message per parent the announcement reaches, resolving class and node targets over current-year enrollments. Visibility is enforced separately by RLS through `announcement_visible()`, which handles the same targeting rules.
+
+## D-014 — Class and version names are content, written in French
+Auto-generated names such as "1ère année primaire A", "Rentrée 2026-2027" or "Scolarité mensuelle — octobre 2026" are data. They're stored as generated, in French, and don't change when the UI switches to Arabic, per the brief ("content stays as entered"). Curriculum nodes do carry an Arabic name (`name_ar`), which the UI shows in Arabic mode.
+
+## D-015 — RTL implementation details
+- **Emotion:** there are two caches, one with `stylis-plugin-rtl` for Arabic. That plugin needs a CommonJS/ESM interop guard, because under SSR its default import resolves to the module object instead of the function, which crashed the Arabic shell.
+- **Mixed-direction text:** user-entered content (names, messages, announcement and homework text) is rendered with `dir="auto"`, so French text inside the Arabic UI keeps its punctuation and truncation in the right place.
+- **Formatting:** dates and money use `ar-MA` with Latin digits (`-u-nu-latn`), which is common Moroccan usage. Durations are localized: "1 س 30 د".
+- **Drawers:** they use logical anchors. MUI flips `left`/`right` itself under an RTL theme.
