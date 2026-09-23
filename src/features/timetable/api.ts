@@ -133,3 +133,36 @@ export function subjectColor(id: string | null | undefined) {
   for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0
   return PALETTE[h % PALETTE.length]
 }
+
+// Where the given teachers already teach in other classes (published trames
+// whose period meets [from, to]): the drop targets a drag must avoid.
+export const teachersBusyQuery = (schoolId: string, classId: string, teacherIds: string[], from: string, to: string | null) =>
+  queryOptions({
+    queryKey: ['school', schoolId, 'tt-busy', classId, teacherIds.join(), from, to],
+    enabled: teacherIds.length > 0,
+    queryFn: async () => {
+      const rows = must(
+        await supabase
+          .from('timetable_slots')
+          .select('teacher_member_id, weekday, starts_at, ends_at, version:timetable_versions!inner(status, effective_from, effective_to, class:classes(name))')
+          .eq('version.status', 'published')
+          .neq('class_id', classId)
+          .in('teacher_member_id', teacherIds),
+      ) as unknown as {
+        teacher_member_id: string
+        weekday: number
+        starts_at: string
+        ends_at: string
+        version: { effective_from: string; effective_to: string | null; class: { name: string } | null }
+      }[]
+      return rows
+        .filter((r) => r.version.effective_from <= (to ?? '9999-12-31') && (r.version.effective_to ?? '9999-12-31') >= from)
+        .map((r) => ({
+          teacherId: r.teacher_member_id,
+          weekday: r.weekday,
+          start: r.starts_at.slice(0, 5),
+          end: r.ends_at.slice(0, 5),
+          label: r.version.class?.name ?? '',
+        }))
+    },
+  })

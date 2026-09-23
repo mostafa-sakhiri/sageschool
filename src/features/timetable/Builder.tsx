@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type PointerEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -8,14 +8,22 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   LinearProgress,
   MenuItem,
   Paper,
+  Popover,
+  Snackbar,
+  SnackbarContent,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
 import AddOutlined from '@mui/icons-material/AddOutlined'
+import ContentCopyOutlined from '@mui/icons-material/ContentCopyOutlined'
+import DeleteOutlined from '@mui/icons-material/DeleteOutlined'
+import DragIndicatorOutlined from '@mui/icons-material/DragIndicatorOutlined'
+import EditOutlined from '@mui/icons-material/EditOutlined'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
@@ -26,7 +34,8 @@ import { assignmentsQuery, requiredHoursQuery, teachersQuery } from '#/features/
 import { EmptyState, ErrorState, Loading } from '#/components/states'
 import { Tag } from '#/components/ui'
 import { WeekGrid, type Block } from './WeekGrid'
-import { membersNamesQuery, slotsQuery, subjectColor, versionsQuery, type Slot, type Version } from './api'
+import { membersNamesQuery, slotsQuery, subjectColor, teachersBusyQuery, versionsQuery, type Slot, type Version } from './api'
+import { Planner, Range, type NewItem, type Place, type PlannerSlot, type Verdict } from './Planner'
 import { useSchoolDays } from './RealWeek'
 import { dayOf, firstFree, fromMin, slotIssues, weeklyTeachable } from '#/features/setup/schedule'
 import { pauseLabel } from '#/features/setup/ScheduleEditor'
@@ -176,18 +185,26 @@ function StatusTag({ v }: { v: Version }) {
 function VersionEditor({ classId, version }: { classId: string; version: Version }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
+  const queryClient = useQueryClient()
   const { days, start, end, horaire, bands, dayRanges } = useSchoolDays(classId)
-  const slots = useQuery(slotsQuery(ctx.school.id, version.id))
+  const slotsQ = slotsQuery(ctx.school.id, version.id)
+  const slots = useQuery(slotsQ)
   const required = useQuery(requiredHoursQuery(ctx.school.id, classId))
   const subjects = useQuery(subjectsQuery(ctx.school.id))
   const rooms = useQuery(roomsQuery(ctx.school.id))
   const names = useQuery(membersNamesQuery(ctx.school.id))
+  const assignments = useQuery(assignmentsQuery(ctx.school.id, classId))
+  const teacherIds = [...new Set((assignments.data ?? []).map((a) => a.teacher_member_id))].sort()
+  const busy = useQuery(teachersBusyQuery(ctx.school.id, classId, teacherIds, version.effective_from, version.effective_to))
   const [edit, setEdit] = useState<Partial<Slot> | null>(null)
+  const [menu, setMenu] = useState<{ id: string; anchor: HTMLElement } | null>(null)
+  const [toast, setToast] = useState<{ message: string; undo?: () => Promise<unknown>; error?: boolean; n: number } | null>(null)
   const editable = version.status === 'draft'
 
   const subjectName = (id: string | null) => subjects.data?.find((s) => s.id === id)?.name
   const dayNames = t('setup.dayNames').split(',')
   const labels = Object.fromEntries(days.map((d) => [d, dayNames[d - 1]]))
+  const list = slots.data ?? []
 
   const placed = useMemo(() => {
     const m = new Map<string, number>()
@@ -196,92 +213,359 @@ function VersionEditor({ classId, version }: { classId: string; version: Version
   }, [slots.data])
 
   // "Ajouter une séance": the first free moment of the week, pauses skipped
-  const nextFree = (): Partial<Slot> => {
-    for (const d of days) {
+  const freeFrom = (len: number, fromDay = days[0], from?: string): { weekday: number; starts_at: string } | null => {
+    for (const d of days.filter((x) => x >= fromDay)) {
       const day = horaire ? dayOf(horaire, d) : { start, end, pauses: [] }
       if (!day) continue
-      const taken = (slots.data ?? []).filter((s) => s.weekday === d).map((s) => ({ start: hhmm(s.starts_at), end: hhmm(s.ends_at) }))
-      const at = firstFree(day, taken, 15)
-      if (at) return { weekday: d, starts_at: at, ends_at: '' }
+      const taken = list.filter((s) => s.weekday === d).map((s) => ({ start: hhmm(s.starts_at), end: hhmm(s.ends_at) }))
+      const at = firstFree(day, taken, len, d === fromDay && from ? from : day.start)
+      if (at) return { weekday: d, starts_at: at }
     }
-    return { weekday: days[0], starts_at: start, ends_at: '' }
+    return null
   }
+  const nextFree = (): Partial<Slot> => ({ ...(freeFrom(15) ?? { weekday: days[0], starts_at: start }), ends_at: '' })
   const available = horaire ? weeklyTeachable(horaire) : null
   const requiredTotal = (required.data ?? []).reduce((a, r) => a + (r.weekly_minutes ?? 0), 0)
+
+  // ------------------------------------------------ saving, optimistic + undo
+  const say = (message: string, undo?: () => Promise<unknown>) => setToast({ message, undo, n: Date.now() })
+  const run = async (optimistic: (s: Slot[]) => Slot[], op: () => Promise<void>) => {
+    await queryClient.cancelQueries({ queryKey: slotsQ.queryKey })
+    const prev = queryClient.getQueryData(slotsQ.queryKey) ?? []
+    queryClient.setQueryData(slotsQ.queryKey, optimistic(prev))
+    try {
+      await op()
+      return true
+    } catch (e) {
+      queryClient.setQueryData(slotsQ.queryKey, prev)
+      setToast({ message: errorMessage(e, t), error: true, n: Date.now() })
+      return false
+    } finally {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: slotsQ.queryKey }),
+        queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'tt-week'] }),
+      ])
+    }
+  }
+  type Row = Pick<Slot, 'weekday' | 'starts_at' | 'ends_at' | 'subject_id' | 'teacher_member_id' | 'room_id' | 'title'>
+  const rowOf = (s: Slot): Row => ({
+    weekday: s.weekday,
+    starts_at: hhmm(s.starts_at),
+    ends_at: hhmm(s.ends_at),
+    subject_id: s.subject_id,
+    teacher_member_id: s.teacher_member_id,
+    room_id: s.room_id,
+    title: s.title,
+  })
+  const update = (id: string, patch: Pick<Slot, 'weekday' | 'starts_at' | 'ends_at'>) =>
+    run(
+      (all) => all.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+      async () => void must(await supabase.from('timetable_slots').update(patch).eq('id', id)),
+    )
+  const insert = async (row: Row) => {
+    let id = ''
+    const ok = await run(
+      (all) => [...all, { ...row, id: `pending-${Date.now()}`, version_id: version.id }],
+      async () => {
+        id = must(
+          await supabase
+            .from('timetable_slots')
+            .insert({ ...row, school_id: ctx.school.id, class_id: classId, version_id: version.id })
+            .select('id')
+            .single(),
+        ).id
+      },
+    )
+    return ok ? id : null
+  }
+  const remove = (id: string) =>
+    run(
+      (all) => all.filter((s) => s.id !== id),
+      async () => void must(await supabase.from('timetable_slots').delete().eq('id', id)),
+    )
+
+  const when = (p: Place) => `${labels[p.weekday]} \u2066${p.start}–${p.end}\u2069`
+  const place = async (id: string, p: Place, how: 'move' | 'resize' | 'copy') => {
+    const s = list.find((x) => x.id === id)!
+    const patch = { weekday: p.weekday, starts_at: p.start, ends_at: p.end }
+    if (how === 'copy') {
+      const nid = await insert({ ...rowOf(s), ...patch })
+      if (nid) say(t('tt.duplicated', { when: when(p) }), () => remove(nid))
+      return
+    }
+    const back = { weekday: s.weekday, starts_at: hhmm(s.starts_at), ends_at: hhmm(s.ends_at) }
+    if (await update(id, patch)) say(t(how === 'move' ? 'tt.moved' : 'tt.resized', { when: when(p) }), () => update(id, back))
+  }
+  // Keyboard: same start and day = the length changed
+  const nudge = (id: string, p: Place) => {
+    const s = list.find((x) => x.id === id)!
+    void place(id, p, s.weekday === p.weekday && hhmm(s.starts_at) === p.start ? 'resize' : 'move')
+  }
+  const del = async (id: string) => {
+    const s = list.find((x) => x.id === id)
+    if (!s) return
+    setMenu(null)
+    if (await remove(id)) say(t('tt.deleted', { name: s.title || subjectName(s.subject_id) || '' }), () => insert(rowOf(s)))
+  }
+  const duplicate = async (id: string) => {
+    const s = list.find((x) => x.id === id)!
+    setMenu(null)
+    const len = toMin(s.ends_at) - toMin(s.starts_at)
+    const at = freeFrom(len, s.weekday, hhmm(s.ends_at)) ?? freeFrom(len)
+    if (!at) return setToast({ message: t('tt.noRoomLeft'), error: true, n: Date.now() })
+    const p = { weekday: at.weekday, start: at.starts_at, end: fromMin(toMin(at.starts_at) + len) }
+    const nid = await insert({ ...rowOf(s), weekday: p.weekday, starts_at: p.start, ends_at: p.end })
+    if (nid) say(t('tt.duplicated', { when: when(p) }), () => remove(nid))
+  }
+  const teacherOf = (subjectId: string) =>
+    assignments.data?.find((a) => a.subject_id === subjectId && a.kind !== 'assistant')?.teacher_member_id ?? null
+  const drop = async (item: NewItem, p: Place) => {
+    const nid = await insert({
+      weekday: p.weekday,
+      starts_at: p.start,
+      ends_at: p.end,
+      subject_id: item.key,
+      teacher_member_id: item.teacherId,
+      room_id: null,
+      title: null,
+    })
+    if (nid) say(t('tt.created', { name: item.title, when: when(p) }), () => remove(nid))
+  }
+
+  // Ctrl/Cmd + Z undoes the last change
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z' || !toast?.undo) return
+      if ((e.target as HTMLElement)?.closest('input, textarea, [contenteditable]')) return
+      e.preventDefault()
+      const undo = toast.undo
+      setToast(null)
+      void undo()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toast])
+
+  // Can a session of `teacherId` sit at `p`? Pauses only warn.
+  const check = (p: Place, ignoreId: string | null, teacherId: string | null): Verdict => {
+    const issues = slotIssues(horaire, p.weekday, p.start, p.end)
+    if (issues.closed) return { level: 'bad', message: t('tt.dayClosed') }
+    if (issues.outside) return { level: 'bad', message: t('tt.outsideDay') }
+    const a = toMin(p.start)
+    const b = toMin(p.end)
+    const hit = list.find((s) => s.id !== ignoreId && s.weekday === p.weekday && toMin(s.starts_at) < b && a < toMin(s.ends_at))
+    if (hit) return { level: 'bad', message: t('tt.overlaps', { name: hit.title || subjectName(hit.subject_id) || '—' }) }
+    const other = teacherId && busy.data?.find((x) => x.teacherId === teacherId && x.weekday === p.weekday && toMin(x.start) < b && a < toMin(x.end))
+    if (other) return { level: 'bad', message: t('tt.teacherBusy', { name: names.data?.[teacherId!] ?? '', class: other.label }) }
+    if (issues.pauses.length) return { level: 'warn', message: t('tt.overPause', { pauses: issues.pauses.map((x) => pauseLabel(x, t)).join(', ') }) }
+    return { level: 'ok' }
+  }
 
   if (slots.isPending) return <Loading rows={4} />
   if (slots.isError) return <ErrorState error={slots.error} onRetry={() => slots.refetch()} />
 
-  const blocks: Block[] = (slots.data ?? []).map((s) => ({
-    key: s.id,
+  const coverage = (startDrag?: (e: PointerEvent, item: NewItem) => void) => (
+    <Paper variant="outlined" sx={{ p: 2, alignSelf: 'start', position: { lg: 'sticky' }, top: { lg: 16 } }}>
+      <Typography variant="h5" sx={{ mb: 0.5 }}>
+        {startDrag ? t('tt.toPlace') : t('tt.coverage')}
+      </Typography>
+      {startDrag && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          {t('tt.toPlaceHint')}
+        </Typography>
+      )}
+      {available !== null && requiredTotal > 0 && (
+        <Alert severity={requiredTotal > available ? 'warning' : 'info'} icon={false} sx={{ mb: 1.5, py: 0 }}>
+          {t('tt.availability', { program: formatMinutes(requiredTotal, locale), available: formatMinutes(available, locale) })}
+        </Alert>
+      )}
+      {(required.data ?? []).length === 0 && <Typography color="text.secondary">{t('classes.noHours')}</Typography>}
+      <Stack spacing={0.75}>
+        {(required.data ?? []).map((r) => {
+          const p = placed.get(r.subject_id!) ?? 0
+          const need = r.weekly_minutes ?? 0
+          const left = need - p
+          const color = subjectColor(r.subject_id)
+          const name = subjectName(r.subject_id) ?? '—'
+          const done = p >= need
+          const item: NewItem = {
+            key: r.subject_id!,
+            title: name,
+            color,
+            minutes: Math.max(15, Math.min(left > 0 ? left : 60, r.max_session_minutes ?? 60, 60)),
+            teacherId: teacherOf(r.subject_id!),
+          }
+          return (
+            <Box
+              key={r.subject_id}
+              onPointerDown={startDrag ? (e) => startDrag(e, item) : undefined}
+              title={startDrag ? t('tt.dragMe') : undefined}
+              sx={{
+                p: 0.75,
+                px: 1,
+                borderRadius: '10px',
+                border: `1px solid ${startDrag && !done ? `${color.ink}33` : 'transparent'}`,
+                bgcolor: startDrag && !done ? color.bg : 'transparent',
+                cursor: startDrag ? 'grab' : undefined,
+                touchAction: startDrag ? 'none' : undefined,
+                userSelect: 'none',
+                '&:hover': startDrag ? { boxShadow: '0 2px 8px rgba(28,26,22,0.12)' } : undefined,
+              }}
+            >
+              <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+                {startDrag && <DragIndicatorOutlined sx={{ fontSize: 16, color: color.ink, opacity: 0.6 }} />}
+                <Typography noWrap sx={{ fontSize: 13, fontWeight: 500, flex: 1, color: startDrag && !done ? color.ink : undefined }}>
+                  {name}
+                </Typography>
+                <Typography sx={{ fontSize: 12, whiteSpace: 'nowrap', color: done ? tokens.accentDark : tokens.inkMuted }}>
+                  {done ? `✓ ${formatMinutes(p, locale)}` : startDrag ? t('tt.left', { time: formatMinutes(left, locale) }) : `${formatMinutes(p, locale)} / ${formatMinutes(need, locale)}`}
+                </Typography>
+              </Stack>
+              <LinearProgress variant="determinate" value={Math.min(100, (p / (need || 1)) * 100)} sx={{ height: 4, borderRadius: 3, mt: 0.5 }} />
+            </Box>
+          )
+        })}
+      </Stack>
+    </Paper>
+  )
+
+  if (!editable) {
+    const blocks: Block[] = list.map((s) => ({
+      key: s.id,
+      weekday: s.weekday,
+      start: s.starts_at,
+      end: s.ends_at,
+      title: s.title || subjectName(s.subject_id) || '—',
+      lines: [s.title ? (subjectName(s.subject_id) ?? '') : '', names.data?.[s.teacher_member_id ?? ''] ?? '', rooms.data?.find((r) => r.id === s.room_id)?.name ?? ''].filter(Boolean),
+      color: subjectColor(s.subject_id),
+    }))
+    return (
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: '1fr 300px' } }}>
+        <WeekGrid days={days} dayLabels={labels} blocks={blocks} bands={bands} dayRanges={dayRanges} dayStart={start} dayEnd={end} emptyText={t('tt.emptyVersion')} />
+        {coverage()}
+      </Box>
+    )
+  }
+
+  const plannerSlots: PlannerSlot[] = list.map((s) => ({
+    id: s.id,
     weekday: s.weekday,
-    start: s.starts_at,
-    end: s.ends_at,
+    start: hhmm(s.starts_at),
+    end: hhmm(s.ends_at),
     title: s.title || subjectName(s.subject_id) || '—',
-    lines: [
-      s.title ? (subjectName(s.subject_id) ?? '') : '',
-      names.data?.[s.teacher_member_id ?? ''] ?? '',
-      rooms.data?.find((r) => r.id === s.room_id)?.name ?? '',
-    ].filter(Boolean),
+    lines: [s.title ? (subjectName(s.subject_id) ?? '') : '', names.data?.[s.teacher_member_id ?? ''] ?? '', rooms.data?.find((r) => r.id === s.room_id)?.name ?? ''].filter(Boolean),
     color: subjectColor(s.subject_id),
-    onClick: editable ? () => setEdit(s) : undefined,
+    teacherId: s.teacher_member_id,
+    pending: s.id.startsWith('pending-'),
   }))
+  const open = menu && list.find((s) => s.id === menu.id)
 
   return (
-    <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: '1fr 300px' } }}>
-      <Stack spacing={1.5}>
-        {editable && (
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
-            <Button startIcon={<AddOutlined />} variant="outlined" onClick={() => setEdit(nextFree())} sx={{ alignSelf: 'flex-start' }}>
-              {t('tt.addSlot')}
-            </Button>
+    <Stack spacing={1.5}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
+        <Button startIcon={<AddOutlined />} variant="outlined" onClick={() => setEdit(nextFree())} sx={{ alignSelf: 'flex-start', flexShrink: 0 }}>
+          {t('tt.addSlot')}
+        </Button>
+        <Typography variant="body2" color="text.secondary">
+          {t('tt.plannerHint')}
+        </Typography>
+      </Stack>
+      <Planner
+        days={days}
+        dayLabels={labels}
+        slots={plannerSlots}
+        bands={bands}
+        busy={busy.data ?? []}
+        dayRanges={dayRanges}
+        dayStart={start}
+        dayEnd={end}
+        check={check}
+        onPlace={place}
+        onNudge={nudge}
+        onCreate={(p) => setEdit({ weekday: p.weekday, starts_at: p.start, ends_at: p.end })}
+        onOpen={(id, anchor) => setMenu({ id, anchor })}
+        onDrop={drop}
+        onDelete={del}
+        aside={(startDrag) => coverage(startDrag)}
+      />
+      <Popover
+        open={!!open}
+        anchorEl={menu?.anchor}
+        onClose={() => setMenu(null)}
+        anchorOrigin={{ vertical: 'center', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'center', horizontal: 'left' }}
+        slotProps={{ paper: { sx: { p: 2, width: 300, borderRadius: 3 } } }}
+      >
+        {open && (
+          <Stack spacing={1}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Box sx={{ width: 12, height: 12, borderRadius: 1, bgcolor: subjectColor(open.subject_id).ink, flexShrink: 0 }} />
+              <Typography sx={{ fontWeight: 600, fontSize: 15 }}>{open.title || subjectName(open.subject_id)}</Typography>
+            </Stack>
             <Typography variant="body2" color="text.secondary">
-              {t('tt.clickToAdd')}
+              {labels[open.weekday]} · <Range start={hhmm(open.starts_at)} end={hhmm(open.ends_at)} /> · {formatMinutes(toMin(open.ends_at) - toMin(open.starts_at), locale)}
             </Typography>
+            {open.title && <Typography variant="body2">{subjectName(open.subject_id)}</Typography>}
+            {open.teacher_member_id && <Typography variant="body2">{names.data?.[open.teacher_member_id]}</Typography>}
+            {open.room_id && <Typography variant="body2">{rooms.data?.find((r) => r.id === open.room_id)?.name}</Typography>}
+            <Stack direction="row" spacing={0.5} sx={{ pt: 0.5 }}>
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<EditOutlined />}
+                onClick={() => {
+                  setMenu(null)
+                  setEdit(open)
+                }}
+              >
+                {t('common.edit')}
+              </Button>
+              <Button size="small" startIcon={<ContentCopyOutlined />} onClick={() => duplicate(open.id)}>
+                {t('tt.duplicate')}
+              </Button>
+              <Box sx={{ flex: 1 }} />
+              <IconButton size="small" color="error" aria-label={t('common.delete')} onClick={() => del(open.id)}>
+                <DeleteOutlined fontSize="small" />
+              </IconButton>
+            </Stack>
           </Stack>
         )}
-        <WeekGrid
-          days={days}
-          dayLabels={labels}
-          blocks={blocks}
-          bands={bands}
-          dayRanges={dayRanges}
-          dayStart={start}
-          dayEnd={end}
-          emptyText={t('tt.emptyVersion')}
-          onEmptyClick={editable ? (weekday, time) => setEdit({ weekday, starts_at: time, ends_at: '' }) : undefined}
-        />
-      </Stack>
-      <Paper variant="outlined" sx={{ p: 2, alignSelf: 'start' }}>
-        <Typography variant="h5" sx={{ mb: 1.5 }}>
-          {t('tt.coverage')}
-        </Typography>
-        {available !== null && requiredTotal > 0 && (
-          <Alert severity={requiredTotal > available ? 'warning' : 'info'} icon={false} sx={{ mb: 1.5, py: 0 }}>
-            {t('tt.availability', { program: formatMinutes(requiredTotal, locale), available: formatMinutes(available, locale) })}
+      </Popover>
+      <Snackbar
+        key={toast?.n}
+        open={!!toast}
+        autoHideDuration={toast?.error ? 8000 : 6000}
+        onClose={(_, reason) => reason !== 'clickaway' && setToast(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        {toast?.error ? (
+          <Alert severity="error" variant="filled" onClose={() => setToast(null)}>
+            {toast.message}
           </Alert>
+        ) : (
+          <SnackbarContent
+            message={toast?.message}
+            action={
+              toast?.undo && (
+                <Button
+                  color="inherit"
+                  size="small"
+                  sx={{ fontWeight: 700, color: '#9FE0CF' }}
+                  onClick={() => {
+                    const undo = toast.undo!
+                    setToast(null)
+                    void undo()
+                  }}
+                >
+                  {t('tt.undo')}
+                </Button>
+              )
+            }
+          />
         )}
-        {(required.data ?? []).length === 0 && <Typography color="text.secondary">{t('classes.noHours')}</Typography>}
-        <Stack spacing={1.25}>
-          {(required.data ?? []).map((r) => {
-            const p = placed.get(r.subject_id!) ?? 0
-            const pct = Math.min(100, (p / (r.weekly_minutes || 1)) * 100)
-            return (
-              <Box key={r.subject_id}>
-                <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
-                  <Typography sx={{ fontSize: 13, fontWeight: 500 }}>{subjectName(r.subject_id)}</Typography>
-                  <Typography sx={{ fontSize: 12.5, color: p >= (r.weekly_minutes ?? 0) ? tokens.accentDark : tokens.inkMuted }}>
-                    {formatMinutes(p, locale)} / {formatMinutes(r.weekly_minutes ?? 0, locale)}
-                  </Typography>
-                </Stack>
-                <LinearProgress variant="determinate" value={pct} sx={{ height: 5, borderRadius: 3, mt: 0.5 }} />
-              </Box>
-            )
-          })}
-        </Stack>
-      </Paper>
-      {edit && <SlotDialog classId={classId} version={version} slot={edit} taken={slots.data ?? []} onClose={() => setEdit(null)} />}
-    </Box>
+      </Snackbar>
+      {edit && <SlotDialog classId={classId} version={version} slot={edit} taken={list} onClose={() => setEdit(null)} />}
+    </Stack>
   )
 }
 
