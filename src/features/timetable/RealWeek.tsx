@@ -27,18 +27,38 @@ import { roomsQuery, subjectsQuery } from '#/features/structure/api'
 import { teachersQuery } from '#/features/classes/api'
 import { ErrorState, Loading } from '#/components/states'
 import { Tag } from '#/components/ui'
-import { WeekGrid, type Block } from './WeekGrid'
+import { WeekGrid, type Band, type Block } from './WeekGrid'
+import { nodesQuery } from '#/features/structure/api'
+import { dayOf, horaireForNode, readHoraires, unionBounds } from '#/features/setup/schedule'
+import { pauseLabel } from '#/features/setup/ScheduleEditor'
 import { classWeekQuery, membersNamesQuery, subjectColor, type DaySession } from './api'
 import { tokens } from '#/theme/theme'
 
-export function useSchoolDays() {
+// The days, hours and pauses a timetable grid shows. With a class: that
+// class's horaire (its cycle's), pauses included. Without: every horaire of
+// the school merged (a teacher working across cycles), no pauses.
+export function useSchoolDays(classId?: string) {
   const ctx = useSchool()
-  const opening = (ctx.school.settings as { opening?: { days: string[]; day: [string, string] } }).opening
-  return {
-    days: (opening?.days ?? ['1', '2', '3', '4', '5']).map(Number),
-    start: opening?.day?.[0] ?? '08:00',
-    end: opening?.day?.[1] ?? '17:00',
+  const { t } = useI18n()
+  const horaires = readHoraires(ctx.school.settings)
+  const nodes = useQuery({ ...nodesQuery(ctx.school.id), enabled: !!classId })
+  const cls = useQuery({
+    queryKey: ['school', ctx.school.id, 'class-node', classId],
+    enabled: !!classId,
+    staleTime: Infinity,
+    queryFn: async () => must(await supabase.from('classes').select('node_id').eq('id', classId!).single()),
+  })
+  const horaire = classId && nodes.data && cls.data ? horaireForNode(horaires, nodes.data, cls.data.node_id) : null
+  if (!horaire) return { ...unionBounds(horaires), horaire: null, bands: [] as Band[], dayRanges: undefined }
+  const { days, start, end } = unionBounds([horaire])
+  const bands: Band[] = []
+  const dayRanges: Record<number, { start: string; end: string }> = {}
+  for (const d of days) {
+    const day = dayOf(horaire, d)!
+    dayRanges[d] = { start: day.start, end: day.end }
+    for (const p of day.pauses) bands.push({ weekday: d, start: p.start, end: p.end, label: pauseLabel(p, t), kind: p.kind })
   }
+  return { days, start, end, horaire, bands, dayRanges }
 }
 
 export function WeekNav({ monday, onChange }: { monday: string; onChange: (m: string) => void }) {
@@ -76,7 +96,7 @@ export function RealWeek({
 }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
-  const { days, start, end } = useSchoolDays()
+  const { days, start, end, bands, dayRanges } = useSchoolDays(classId)
   const [monday, setMonday] = useState(initialMonday ?? mondayOf(ctx.year && todayIso() < ctx.year.starts_on ? ctx.year.starts_on : todayIso()))
   const week = useQuery(classWeekQuery(ctx.school.id, classId, monday, days))
   const subjects = useQuery(subjectsQuery(ctx.school.id))
@@ -155,7 +175,17 @@ export function RealWeek({
       ) : week.isError ? (
         <ErrorState error={week.error} onRetry={() => week.refetch()} />
       ) : (
-        <WeekGrid days={days} dayLabels={labels} blocks={blocks} dayStart={start} dayEnd={end} dayNotes={notes} emptyText={t('tt.noPublished')} />
+        <WeekGrid
+          days={days}
+          dayLabels={labels}
+          blocks={blocks}
+          bands={bands.filter((b) => !notes[b.weekday])}
+          dayRanges={dayRanges}
+          dayStart={start}
+          dayEnd={end}
+          dayNotes={notes}
+          emptyText={t('tt.noPublished')}
+        />
       )}
       <ExceptionsList classId={classId} monday={monday} canEdit={allowExceptions} />
       {picked && (

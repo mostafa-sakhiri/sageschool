@@ -50,6 +50,7 @@
     "@tanstack/react-router": "1.170.38",
     "@tanstack/react-router-ssr-query": "1.167.3",
     "@tanstack/react-start": "1.168.57",
+    "nitro": "3.0.260903-beta",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "stylis": "4.3.6",

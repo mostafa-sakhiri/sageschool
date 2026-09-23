@@ -237,7 +237,7 @@ function HoursRow({
         label={t('hours.perWeek')}
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        slotProps={{ htmlInput: { min: 0, step: 0.5, 'aria-label': `${label} — ${t('hours.perWeek')}` } }}
+        slotProps={{ htmlInput: { min: 0, step: 0.25, 'aria-label': `${label} — ${t('hours.perWeek')}` } }}
         sx={{ width: 120 }}
         helperText={formatMinutes(Math.round(Number(value || 0) * 60))}
       />

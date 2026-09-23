@@ -10,17 +10,36 @@
 -- surcharger (autre valeur) ou retirer (0) une matière.
 -- =====================================================================
 
+-- Le préscolaire a été refait (activités au lieu de matières) : on retire
+-- les anciennes lignes avant de réinsérer.
+DELETE FROM curriculum_template_hours
+ WHERE template_code = 'ma_public' AND node_code LIKE 'PRESCO%';
+
 INSERT INTO curriculum_template_hours
   (template_code, node_code, subject_code, subject_name, weekly_minutes,
    min_session_minutes, max_session_minutes, max_sessions_per_day, status, source)
 VALUES
-  -- Préscolaire (cycle entier)
-  ('ma_public','PRESCO','LANG_AR','Langage arabe',            300, 30, 60, 1,'proposed','usage préscolaire'),
-  ('ma_public','PRESCO','LANG_FR','Langage français',         300, 30, 60, 1,'proposed','usage préscolaire'),
-  ('ma_public','PRESCO','LOGMATH','Activités logico-mathématiques',180, 30, 45, 1,'proposed','usage préscolaire'),
-  ('ma_public','PRESCO','EVEIL','Éveil',                      120, 30, 60, 1,'proposed','usage préscolaire'),
-  ('ma_public','PRESCO','ARTS','Activités artistiques',       180, 30, 60, 1,'proposed','usage préscolaire'),
-  ('ma_public','PRESCO','EPS','Éducation physique',           120, 30, 60, 1,'proposed','usage préscolaire'),
+  -- Préscolaire (cycle entier) : des ACTIVITÉS, pas des matières. Catalogue et
+  -- volumes d'une petite section de préscolaire privé (emploi du temps de
+  -- Ptichou Preschool, 2026-2027) : 16 h d'activités par semaine. Les routines
+  -- (accueil, goûter, déjeuner, sieste, change, sortie) ne sont pas ici : ce
+  -- sont les pauses de l'horaire du cycle (schools.settings.schedules).
+  -- Codes propres au préscolaire : aucune collision avec le primaire d'une
+  -- école qui a les deux cycles.
+  ('ma_public','PRESCO','RITUEL','Rituel du matin',                 150, 30, 30, 1,'proposed','usage préscolaire (Ptichou PS)'),
+  ('ma_public','PRESCO','MOTRICITE','Motricité (jeux, parcours, yoga)',150, 30, 30, 1,'proposed','usage préscolaire (Ptichou PS)'),
+  ('ma_public','PRESCO','ANG_EVEIL','Éveil à l''anglais',             90, 30, 60, 1,'proposed','usage préscolaire (Ptichou PS)'),
+  ('ma_public','PRESCO','ACT_LIBRE','Activité libre',                  90, 45, 45, 1,'proposed','usage préscolaire (Ptichou PS)'),
+  ('ma_public','PRESCO','ORG_PENSEE','Organisation de la pensée',      75, 30, 45, 1,'proposed','usage préscolaire (Ptichou PS)'),
+  ('ma_public','PRESCO','DECOUVERTE','Découverte du monde',            75, 30, 45, 1,'proposed','usage préscolaire (Ptichou PS)'),
+  ('ma_public','PRESCO','MODELAGE','Pâte à modeler',                   60, 15, 30, 1,'proposed','usage préscolaire (Ptichou PS)'),
+  ('ma_public','PRESCO','ARTS_PLAST','Activités artistiques',          60, 30, 30, 1,'proposed','usage préscolaire (Ptichou PS)'),
+  ('ma_public','PRESCO','GRAPHISME','Graphisme et activité de livre',  45, 30, 45, 1,'proposed','usage préscolaire (Ptichou PS)'),
+  ('ma_public','PRESCO','LANGAGE','Langage et conte',                  45, 15, 30, 1,'proposed','usage préscolaire (Ptichou PS)'),
+  ('ma_public','PRESCO','CLASSEUR','Activités de classeur',            30, 30, 30, 1,'proposed','usage préscolaire (Ptichou PS)'),
+  ('ma_public','PRESCO','DESSIN_FR','Dessin éducatif en français',     30, 30, 30, 1,'proposed','usage préscolaire (Ptichou PS)'),
+  ('ma_public','PRESCO','THEATRE','Théâtre',                           30, 30, 30, 1,'proposed','usage préscolaire (Ptichou PS)'),
+  ('ma_public','PRESCO','ACT_DIRIGEE','Activité dirigée',              30, 30, 30, 1,'proposed','usage préscolaire (Ptichou PS)'),
 
   -- Primaire (cycle entier)
   ('ma_public','PRIM','ARA','Langue arabe',                   420, 45, 90, 2,'proposed','curriculum primaire'),

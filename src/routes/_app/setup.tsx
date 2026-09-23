@@ -1,14 +1,19 @@
-import { useContext } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
-import { Box, Button, Paper, Stack, Step, StepLabel, Stepper, Tab, Tabs, Typography } from '@mui/material'
+import { useContext, useEffect, useState } from 'react'
+import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Alert, Box, Button, Paper, Stack, Step, StepLabel, Stepper, Tab, Tabs, Typography } from '@mui/material'
 import { OnboardingShell } from '#/components/OnboardingShell'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, Card, Tag } from '#/components/ui'
 import { EmptyState, Loading } from '#/components/states'
 import { SchoolContext } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
-import { CreateSchool, StepActions, teachableMinutes, type Opening } from '#/features/setup/CreateSchool'
+import { CreateSchool, StepActions } from '#/features/setup/CreateSchool'
+import { ScheduleEditor, pauseLabel } from '#/features/setup/ScheduleEditor'
+import { dayOf, presetHoraire, readHoraires, weeklyTeachable, type Horaire } from '#/features/setup/schedule'
+import { supabase } from '#/lib/supabase/client'
+import type { Json } from '#/lib/database.types'
+import { errorMessage, must } from '#/lib/errors'
 import { YearForm, YearSection } from '#/features/setup/YearSection'
 import { HoursSection } from '#/features/setup/HoursSection'
 import { RoomsSection } from '#/features/setup/RoomsSection'
@@ -143,7 +148,7 @@ function ContinueWizard({ step, go }: { step: number; go: (s: number) => void })
   )
 }
 
-const TABS = ['school', 'structure', 'years', 'hours', 'rooms'] as const
+const TABS = ['school', 'schedule', 'structure', 'years', 'hours', 'rooms'] as const
 
 function Settings() {
   const { t } = useI18n()
@@ -167,6 +172,7 @@ function Settings() {
         ))}
       </Tabs>
       {current === 'school' && <SchoolInfo />}
+      {current === 'schedule' && <ScheduleSettings />}
       {current === 'structure' && <TreeSection schoolId={ctx.school.id} />}
       {current === 'years' && <YearSection schoolId={ctx.school.id} />}
       {current === 'hours' &&
@@ -183,8 +189,9 @@ function Settings() {
 function SchoolInfo() {
   const { t, locale } = useI18n()
   const ctx = useContext(SchoolContext)!
-  const s = ctx.school.settings as { city?: string; address?: string; opening?: Opening; levels_offered?: string[] }
-  const o = s.opening
+  const navigate = useNavigate()
+  const s = ctx.school.settings as { city?: string; address?: string }
+  const horaires = readHoraires(ctx.school.settings)
   const dayNames = t('setup.dayNames').split(',')
   return (
     <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
@@ -196,19 +203,105 @@ function SchoolInfo() {
         <Info label={t('setup.city')} value={s.city || '—'} />
         <Info label={t('setup.address')} value={s.address || '—'} />
       </Card>
-      {o && (
-        <Card>
-          <Typography variant="h5" sx={{ mb: 1.5 }}>
+      <Card>
+        <Stack direction="row" sx={{ alignItems: 'center', mb: 1.5 }}>
+          <Typography variant="h5" sx={{ flex: 1 }}>
             {t('setup.hoursTitle')}
           </Typography>
-          <Info label={t('setup.days')} value={o.days.map((d) => dayNames[Number(d) - 1]).join(', ')} />
-          <Info label={t('setup.period.day')} value={`${o.day[0]} → ${o.day[1]}`} />
-          <Info label={t('setup.period.lunch')} value={`${o.lunch[0]} → ${o.lunch[1]}`} />
-          <Info label={t('setup.period.recess')} value={`${o.recess[0]} → ${o.recess[1]}`} />
-          <Info label={t('settings.teachablePerWeek')} value={formatMinutes(teachableMinutes(o) * o.days.length, locale)} />
-        </Card>
-      )}
+          <Button size="small" onClick={() => navigate({ to: '/setup', search: { tab: 'schedule' } })}>
+            {t('common.edit')}
+          </Button>
+        </Stack>
+        {horaires.length === 0 && <Typography color="text.secondary">{t('sched.none')}</Typography>}
+        {horaires.map((h) => {
+          const base = h.base
+          const special = Object.keys(h.overrides).filter((d) => h.days.includes(d))
+          return (
+            <Box key={h.id} sx={{ mb: 1.5 }}>
+              {horaires.length > 1 && <Typography sx={{ fontWeight: 600, mb: 0.5 }}>{h.name || t('sched.allLevels')}</Typography>}
+              <Info label={t('setup.days')} value={h.days.map((d) => dayNames[Number(d) - 1]).join(', ')} />
+              <Info label={t('setup.period.day')} value={`${base.start} → ${base.end}`} />
+              <Info label={t('sched.pauses')} value={base.pauses.map((p) => `${pauseLabel(p, t)} ${p.start}–${p.end}`).join(' · ') || '—'} />
+              {special.map((d) => {
+                const day = dayOf(h, d)!
+                return <Info key={d} label={dayNames[Number(d) - 1]} value={`${day.start} → ${day.end}`} />
+              })}
+              <Info label={t('settings.teachablePerWeek')} value={formatMinutes(weeklyTeachable(h), locale)} />
+            </Box>
+          )
+        })}
+      </Card>
     </Box>
+  )
+}
+
+// Horaires per cycle: every cycle of the school gets one (missing ones are
+// prefilled), saved into schools.settings.schedules.
+function ScheduleSettings() {
+  const { t, locale } = useI18n()
+  const ctx = useContext(SchoolContext)!
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const nodes = useQuery(nodesQuery(ctx.school.id))
+  const cycles = (nodes.data ?? []).filter((n) => n.kind === 'cycle' && n.code)
+  const [draft, setDraft] = useState<Horaire[] | null>(null)
+
+  useEffect(() => {
+    if (!nodes.data || draft) return
+    const stored = readHoraires(ctx.school.settings)
+    const fallback = stored.find((h) => h.cycles.length === 0)
+    const list = cycles.map((c) => {
+      const own = stored.find((h) => h.cycles.includes(c.code!))
+      if (own) return own
+      // Legacy single opening: each cycle starts from it
+      if (fallback) return { ...structuredClone(fallback), id: c.code!, name: c.name, cycles: [c.code!] }
+      return presetHoraire(c.code!, c.name)
+    })
+    setDraft(list.length ? list : stored)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes.data])
+
+  const save = useMutation({
+    mutationFn: async (list: Horaire[]) => {
+      const settings: Record<string, unknown> = { ...(ctx.school.settings as Record<string, unknown>), schedules: list }
+      delete settings.opening
+      must(await supabase.from('schools').update({ settings: settings as Json }).eq('id', ctx.school.id))
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['session'] })
+      await router.invalidate()
+    },
+  })
+
+  if (nodes.isPending || !draft) return <Loading rows={5} />
+  const shown = draft.map((h) => {
+    const c = cycles.find((x) => h.cycles.includes(x.code!))
+    return c ? { ...h, name: nodeName(c, locale) } : h
+  })
+  const invalid = draft.some((h) => h.days.length === 0 || weeklyTeachable(h) <= 0)
+  return (
+    <Stack spacing={2}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
+        <Typography sx={{ flex: 1, color: tokens.inkMuted, fontSize: 14 }}>{t('sched.settingsHint')}</Typography>
+        <Button
+          variant="contained"
+          disabled={!ctx.isAdmin || invalid}
+          loading={save.isPending}
+          onClick={() => save.mutate(draft.map((h) => ({ ...h, name: cycles.find((c) => h.cycles.includes(c.code!))?.name ?? h.name })))}
+        >
+          {t('common.save')}
+        </Button>
+      </Stack>
+      {save.isSuccess && !save.isPending && <Alert severity="success">{t('sched.saved')}</Alert>}
+      {save.isError && <Alert severity="error">{errorMessage(save.error, t)}</Alert>}
+      <ScheduleEditor
+        value={shown}
+        onChange={(list) => {
+          save.reset()
+          setDraft(list)
+        }}
+      />
+    </Stack>
   )
 }
 

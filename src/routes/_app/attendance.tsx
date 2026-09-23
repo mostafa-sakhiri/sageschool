@@ -35,6 +35,7 @@ import { classesQuery } from '#/features/classes/api'
 import { subjectsQuery } from '#/features/structure/api'
 import { studentsQuery } from '#/features/students/api'
 import type { DaySession } from '#/features/timetable/api'
+import { useSchoolDays } from '#/features/timetable/RealWeek'
 import { tokens } from '#/theme/theme'
 
 export const Route = createFileRoute('/_app/attendance')({ component: AttendancePage })
@@ -79,11 +80,15 @@ function RollCall() {
       ),
   })
   // A teacher marks their own sessions; default to the first one that day.
+  // Where the horaire says "une fois par jour" (préscolaire), the whole day.
+  const { horaire } = useSchoolDays(classId || undefined)
+  const dailyRollCall = horaire?.rollCall === 'day'
   useEffect(() => {
     if (!sessions.data) return
+    if (dailyRollCall) return setSlotKey('day')
     const mine = sessions.data.find((s) => s.teacher_member_id === ctx.member.id) ?? sessions.data[0]
     setSlotKey(mine?.slot_id ?? 'day')
-  }, [sessions.data, ctx.member.id])
+  }, [sessions.data, ctx.member.id, dailyRollCall])
   const slotId = slotKey === 'day' ? null : slotKey
 
   const roster = useQuery({

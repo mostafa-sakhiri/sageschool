@@ -7,6 +7,26 @@
 import { createClient } from '@supabase/supabase-js'
 import { readFileSync, writeFileSync } from 'node:fs'
 
+// One horaire per cycle: préscolaire (routines, short Friday) and primaire
+// (its own récréations, a later recess on Wednesday)
+const day = (start, end, pauses) => ({ start, end, pauses })
+const SCHEDULES = [
+  {
+    id: 'PRESCO', name: 'Préscolaire', cycles: ['PRESCO'], days: ['1', '2', '3', '4', '5'], rollCall: 'day',
+    base: day('08:30', '16:30', [
+      { kind: 'welcome', start: '08:30', end: '09:00' }, { kind: 'snack', start: '09:00', end: '09:30' },
+      { kind: 'lunch', start: '11:30', end: '12:30' }, { kind: 'nap', start: '12:30', end: '14:00' },
+      { kind: 'care', start: '14:00', end: '14:30' }, { kind: 'dismissal', start: '16:00', end: '16:30' },
+    ]),
+    overrides: { 5: day('08:30', '12:30', [{ kind: 'welcome', start: '08:30', end: '09:00' }, { kind: 'snack', start: '09:00', end: '09:30' }, { kind: 'dismissal', start: '11:30', end: '12:30' }]) },
+  },
+  {
+    id: 'PRIM', name: 'Primaire', cycles: ['PRIM'], days: ['1', '2', '3', '4', '5'], rollCall: 'session',
+    base: day('08:30', '16:30', [{ kind: 'recess', start: '10:15', end: '10:30' }, { kind: 'lunch', start: '12:30', end: '14:00' }, { kind: 'recess', start: '15:15', end: '15:30' }]),
+    overrides: { 3: day('08:30', '16:30', [{ kind: 'recess', start: '10:30', end: '10:45' }, { kind: 'lunch', start: '12:30', end: '14:00' }, { kind: 'recess', start: '15:15', end: '15:30' }]) },
+  },
+]
+
 const env = Object.fromEntries(
   readFileSync(new URL('../.env.local', import.meta.url), 'utf8')
     .split('\n')
@@ -72,7 +92,7 @@ try {
     await dir.rpc('create_school', {
       p_name: `École Walkthrough ${run}`,
       p_slug: `walk-${run}`,
-      p_settings: { city: 'Rabat', levels_offered: ['PRESCO', 'PRIM'], opening: { days: ['1', '2', '3', '4', '5'], day: ['08:30', '16:30'], lunch: ['12:30', '14:00'], recess: ['10:15', '10:30'] } },
+      p_settings: { city: 'Rabat', levels_offered: ['PRESCO', 'PRIM'], schedules: SCHEDULES },
     }),
     'create_school',
   )

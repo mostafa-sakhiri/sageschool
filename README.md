@@ -43,15 +43,21 @@ These exist only in the current local database. After `db reset`, sign up again,
 
 ### Demo preschool
 
-`node scripts/seed_preschool.mjs` creates **Jardin d'Enfants Al Amal**, with `directeur@laureats.test` as admin (switch schools from the account menu):
+`node scripts/seed_preschool.mjs` creates **Ptichou Preschool**, built from its real 2026-2027 petite section timetable, with `directeur@laureats.test` as admin (switch schools from the account menu):
+- The préscolaire day as the cycle's horaire: accueil, goûter, déjeuner, sieste, change + goûter and préparation à la sortie are pauses, not subjects. Friday ends at 12:30. Roll call is once a day.
 - Petite, Moyenne and Grande section: one class each, 16/17/17 children, for 50 children in total.
-- The full préscolaire programme: 6 activities, 20 h/week, all hours confirmed.
-- 5 teachers, all with password `password123`:
-  - salma.idrissi@alamal.test, houda.bennani@alamal.test and nora.elfassi@alamal.test are the class teachers.
-  - khadija.amrani@alamal.test teaches Arabic.
-  - youssef.tazi@alamal.test teaches motricité and arts.
+- The préscolaire activities: 14 activities (rituel, motricité, pâte à modeler, organisation de la pensée, éveil à l'anglais…), 16 h/week, all confirmed.
+- 4 teachers, all with password `password123`: salma.idrissi@ptichou.test, houda.bennani@ptichou.test and nora.elfassi@ptichou.test are the class teachers; sarah.lahlou@ptichou.test teaches English in all three classes.
 - 44 parent accounts (6 sibling pairs).
-- A published, conflict-free timetable for every class.
+- PS follows the PDF slot for slot. MS and GS keep the same mornings, but their afternoons are rotated so the English teacher is never double-booked. All three timetables are published.
+
+### School hours per cycle
+
+Réglages › Horaires, or wizard step 2. Each cycle has its own day:
+- Days open, opening hours, and pauses (récréation, déjeuner, sieste, goûter, accueil, sortie…), with an optional label.
+- Any weekday can override the typical day, for example a shorter Friday or a later récréation on Wednesday.
+- Pauses show in every class timetable of the cycle and don't count as teachable time.
+- The timetable builder warns when a session overlaps a pause or falls outside the day.
 
 ### Importing people (Excel)
 

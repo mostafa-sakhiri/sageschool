@@ -1,12 +1,17 @@
 #!/usr/bin/env node
-// Seeds a complete préscolaire school: "Jardin d'Enfants Al Amal" (spec 01).
+// Seeds a complete préscolaire: "Ptichou Preschool", after its real 2026-2027
+// petite section timetable (Emploi_du_temps_Petite_Section_Ptichou.pdf).
 //  - admin: directeur@laureats.test (existing account) — the school appears in
-//    his school switcher
-//  - PS / MS / GS, one class per level, home rooms + a motricité room
-//  - the full préscolaire programme (6 activities, 20 h/week), confirmed
-//  - 5 teachers (3 class teachers, Arabic, motricité/arts) + assignments
+//    the admin's school switcher
+//  - the préscolaire day as the cycle's horaire: accueil, goûter, déjeuner,
+//    sieste, change + goûter, préparation à la sortie; Friday ends at 12:30;
+//    one roll call a day
+//  - PS / MS / GS, one class per level, each with its home room
+//  - the préscolaire activities (14 activities, 16 h/week), confirmed
+//  - 4 teachers (3 class teachers + an English teacher) + assignments
 //  - 50 children with birth dates, 44 parent accounts (6 sibling pairs)
-//  - a conflict-free weekly timetable per class, published
+//  - PS: the PDF timetable, slot for slot; MS / GS: same mornings, afternoons
+//    rotated so the English teacher is never in two classes at once. Published.
 // Everything except account creation runs as the admin, through RLS.
 // Usage: node scripts/seed_preschool.mjs
 import { createClient } from '@supabase/supabase-js'
@@ -31,7 +36,7 @@ const pick = (a) => a[Math.floor(rand() * a.length)]
 
 const ADMIN_EMAIL = 'directeur@laureats.test'
 const PASSWORD = 'password123'
-const SLUG = 'jardin-al-amal'
+const SLUG = 'ptichou'
 
 const admin = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false } })
 must(await admin.auth.signInWithPassword({ email: ADMIN_EMAIL, password: PASSWORD }), 'admin sign in')
@@ -42,12 +47,35 @@ if ((await service.from('schools').select('id').eq('slug', SLUG).maybeSingle()).
 }
 
 // ---------------------------------------------------------------- school
-const opening = { days: ['1', '2', '3', '4', '5'], day: ['08:30', '16:30'], lunch: ['12:30', '14:00'], recess: ['10:15', '10:30'] }
+// The PDF's day, labels included (content: stays in French in the Arabic UI)
+const day = (end, pauses) => ({ start: '08:30', end, pauses })
+const horaire = {
+  id: 'PRESCO',
+  name: 'Préscolaire',
+  cycles: ['PRESCO'],
+  days: ['1', '2', '3', '4', '5'],
+  rollCall: 'day',
+  base: day('16:30', [
+    { kind: 'welcome', label: 'Accueil des parents + jeux', start: '08:30', end: '09:00' },
+    { kind: 'snack', label: 'Passage aux toilettes + goûter', start: '09:00', end: '09:30' },
+    { kind: 'lunch', label: 'Passage aux toilettes + déjeuner', start: '11:30', end: '12:30' },
+    { kind: 'nap', label: 'Sieste', start: '12:30', end: '14:00' },
+    { kind: 'care', label: 'Changement + goûter', start: '14:00', end: '14:30' },
+    { kind: 'dismissal', label: 'Préparation à la sortie (chanson + danse)', start: '16:00', end: '16:30' },
+  ]),
+  overrides: {
+    5: day('12:30', [
+      { kind: 'welcome', label: 'Accueil des parents + jeux', start: '08:30', end: '09:00' },
+      { kind: 'snack', label: 'Passage aux toilettes + goûter', start: '09:00', end: '09:30' },
+      { kind: 'dismissal', label: 'Préparation à la sortie', start: '11:30', end: '12:30' },
+    ]),
+  },
+}
 const schoolId = must(
   await admin.rpc('create_school', {
-    p_name: "Jardin d'Enfants Al Amal",
+    p_name: 'Ptichou Preschool',
     p_slug: SLUG,
-    p_settings: { city: 'Casablanca', address: '24, rue Al Massira — Oasis', levels_offered: ['PRESCO'], opening, requires_massar_sync: false },
+    p_settings: { city: 'Casablanca', address: '12, rue des Oliviers — Maârif', levels_offered: ['PRESCO'], schedules: [horaire], requires_massar_sync: false },
   }),
   'create_school',
 )
@@ -59,7 +87,7 @@ const year = must(
 must(await admin.rpc('set_current_academic_year', { p_year_id: year.id }), 'current year')
 must(await admin.rpc('apply_curriculum_template_hours', { p_school_id: schoolId, p_academic_year_id: year.id, p_template_code: 'ma_public' }), 'hours')
 must(await admin.from('node_subject_hours').update({ status: 'confirmed' }).eq('academic_year_id', year.id), 'confirm hours')
-console.log('✓ école, année 2026-2027, programme préscolaire (horaires confirmés)')
+console.log('✓ école, horaire du préscolaire, année 2026-2027, 14 activités (16 h/semaine, confirmées)')
 
 // ---------------------------------------------------------------- rooms & classes
 const levels = must(await admin.from('curriculum_nodes').select('id, code').eq('school_id', schoolId).eq('kind', 'level'), 'levels')
@@ -79,12 +107,11 @@ const rooms = must(
 const room = Object.fromEntries(rooms.map((r) => [r.name, r.id]))
 const subjects = must(await admin.from('subjects').select('id, code, name').eq('school_id', schoolId), 'subjects')
 const subj = Object.fromEntries(subjects.map((s) => [s.code, s]))
-must(await admin.from('subjects').update({ room_id: room['Salle de motricité'] }).eq('id', subj.EPS.id), 'EPS room')
 
 const classDefs = [
-  { code: 'PRESCO_PS', name: 'Petite section A', room: 'Les Coccinelles', size: 16, born: 2023 },
-  { code: 'PRESCO_MS', name: 'Moyenne section A', room: 'Les Papillons', size: 17, born: 2022 },
-  { code: 'PRESCO_GS', name: 'Grande section A', room: 'Les Hirondelles', size: 17, born: 2021 },
+  { code: 'PRESCO_PS', name: 'Petite section', room: 'Les Coccinelles', size: 16, born: 2023 },
+  { code: 'PRESCO_MS', name: 'Moyenne section', room: 'Les Papillons', size: 17, born: 2022 },
+  { code: 'PRESCO_GS', name: 'Grande section', room: 'Les Hirondelles', size: 17, born: 2021 },
 ]
 const classes = must(
   await admin
@@ -93,7 +120,7 @@ const classes = must(
     .select('id, name'),
   'classes',
 )
-classDefs.forEach((c, i) => (c.id = classes.find((x) => x.name === c.name).id))
+classDefs.forEach((c) => (c.id = classes.find((x) => x.name === c.name).id))
 console.log('✓ 3 classes (PS, MS, GS) avec leur salle + salle de motricité')
 
 // ---------------------------------------------------------------- accounts
@@ -107,24 +134,25 @@ async function account(email, fullName, role) {
 }
 
 const teacherDefs = [
-  { key: 'PS', name: 'Salma Idrissi', email: 'salma.idrissi@alamal.test' },
-  { key: 'MS', name: 'Houda Bennani', email: 'houda.bennani@alamal.test' },
-  { key: 'GS', name: 'Nora El Fassi', email: 'nora.elfassi@alamal.test' },
-  { key: 'AR', name: 'Khadija Amrani', email: 'khadija.amrani@alamal.test' },
-  { key: 'SP', name: 'Youssef Tazi', email: 'youssef.tazi@alamal.test' },
+  { key: 'PS', name: 'Salma Idrissi', email: 'salma.idrissi@ptichou.test' },
+  { key: 'MS', name: 'Houda Bennani', email: 'houda.bennani@ptichou.test' },
+  { key: 'GS', name: 'Nora El Fassi', email: 'nora.elfassi@ptichou.test' },
+  { key: 'EN', name: 'Sarah Lahlou', email: 'sarah.lahlou@ptichou.test' },
 ]
 const T = {}
 for (const t of teacherDefs) T[t.key] = await account(t.email, t.name, 'teacher')
-console.log('✓ 5 professeurs (3 maîtresses de classe, arabe, motricité/arts)')
+console.log('✓ 4 professeurs (3 maîtresses de classe, une professeure d\'anglais)')
 
-// Who teaches what: the class teacher does French, logico-maths and éveil;
-// Khadija the Arabic language in all three classes; Youssef motricité + arts.
-const owner = (cls, code) => (code === 'LANG_AR' ? T.AR : code === 'EPS' || code === 'ARTS' ? T.SP : T[cls.code.split('_')[1]])
-const assignments = []
-for (const c of classDefs)
-  for (const code of ['LANG_AR', 'LANG_FR', 'LOGMATH', 'EVEIL', 'ARTS', 'EPS'])
-    assignments.push({ school_id: schoolId, class_id: c.id, subject_id: subj[code].id, teacher_member_id: owner(c, code) })
-must(await admin.from('teaching_assignments').insert(assignments), 'assignments')
+// The class teacher leads every activity, except English
+const owner = (cls, code) => (code === 'ANG_EVEIL' ? T.EN : T[cls.code.split('_')[1]])
+must(
+  await admin.from('teaching_assignments').insert(
+    classDefs.flatMap((c) =>
+      subjects.map((s) => ({ school_id: schoolId, class_id: c.id, subject_id: s.id, teacher_member_id: owner(c, s.code) })),
+    ),
+  ),
+  'assignments',
+)
 
 // ---------------------------------------------------------------- children & parents
 const GIRLS = ['Yasmine', 'Lina', 'Salma', 'Aya', 'Nour', 'Rim', 'Inès', 'Malak', 'Hiba', 'Sara', 'Ghita', 'Imane', 'Rania', 'Kenza', 'Douae', 'Hajar', 'Wiam', 'Chaïma', 'Zineb', 'Assia']
@@ -186,7 +214,7 @@ for (let fi = 0; fi < plan.length; fi++) {
   const last = FAMILIES[fi]
   const mother = rand() < 0.75
   const first = mother ? pick(MOTHERS) : pick(FATHERS)
-  const email = `${first}.${last}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z.]/g, '') + `.${fi}@parents-alamal.test`
+  const email = `${first}.${last}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z.]/g, '') + `.${fi}@parents-ptichou.test`
   const memberId = await account(email, `${first} ${last}`, 'parent')
   for (const c of children.filter((x) => x.family === fi))
     guardians.push({ school_id: schoolId, student_id: c.id, guardian_member_id: memberId, relationship: mother ? 'mother' : 'father', is_primary: true, is_payer: true })
@@ -195,84 +223,62 @@ must(await admin.from('student_guardians').insert(guardians), 'guardians')
 console.log(`✓ 50 enfants (PS ${counts[0]}, MS ${counts[1]}, GS ${counts[2]}), ${plan.length} familles dont 6 fratries`)
 
 // ---------------------------------------------------------------- timetables
-// Greedy, conflict-free: heavy language sessions in the morning, motricité
-// and arts in the afternoon, at most one session of a subject per day, the
-// two shared teachers never in two classes at once.
+// Activities only: the routines are the horaire's pauses. [code, minutes, title]
+const MORNING = {
+  1: [['GRAPHISME', 45, 'Activité de livre • Graphisme'], ['RITUEL', 30], ['MOTRICITE', 30, 'Jeux de motricité'], ['MODELAGE', 15]],
+  2: [['ORG_PENSEE', 45, "Activité d'organisation de la pensée"], ['RITUEL', 30], ['MOTRICITE', 30, 'Jeux de motricité'], ['MODELAGE', 15]],
+  3: [['DECOUVERTE', 45, 'Activité de découverte du monde'], ['RITUEL', 30], ['MOTRICITE', 30, 'Parcours moteur • courir, sauter'], ['MODELAGE', 15]],
+  4: [['ACT_LIBRE', 45], ['RITUEL', 30], ['MOTRICITE', 30, 'Yoga'], ['MODELAGE', 15]],
+  5: [['ACT_LIBRE', 45, 'Activité libre (selon une consigne)'], ['RITUEL', 30], ['MOTRICITE', 30, 'Activité de motricité fine'], ['LANGAGE', 15, 'Conte en français ou en anglais']],
+}
+const AFTERNOON = {
+  mon: [['CLASSEUR', 30, 'Activités de classeur (divers)'], ['ARTS_PLAST', 30, 'Activité artistique • Coloriage'], ['DESSIN_FR', 30]],
+  tue: [['ORG_PENSEE', 30, 'Activité classeur • Organisation de la pensée'], ['ANG_EVEIL', 60, 'Anglais']],
+  wed: [['LANGAGE', 30, 'Langage • histoire séquentielle, marionnettes'], ['DECOUVERTE', 30, 'Activité libre • Découverte du monde'], ['ARTS_PLAST', 30, 'Peinture • Pâte à modeler']],
+  thu: [['THEATRE', 30], ['ACT_DIRIGEE', 30], ['ANG_EVEIL', 30, 'Dessin éducatif • vocabulaire en anglais']],
+}
+// Same afternoons, other days (and order): the English teacher is shared
+const reorder = (blocks, first) => [blocks.find((b) => b[0] === first), ...blocks.filter((b) => b[0] !== first)]
+const WEEK = {
+  PRESCO_PS: { 1: AFTERNOON.mon, 2: AFTERNOON.tue, 3: AFTERNOON.wed, 4: AFTERNOON.thu },
+  PRESCO_MS: { 1: AFTERNOON.tue, 2: AFTERNOON.wed, 3: AFTERNOON.thu, 4: AFTERNOON.mon },
+  PRESCO_GS: { 1: AFTERNOON.wed, 2: reorder(AFTERNOON.thu, 'ANG_EVEIL'), 3: AFTERNOON.mon, 4: reorder(AFTERNOON.tue, 'ANG_EVEIL') },
+}
 const toMin = (s) => +s.slice(0, 2) * 60 + +s.slice(3, 5)
 const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
-const PERIODS = [
-  [toMin('08:30'), toMin('10:15')],
-  [toMin('10:30'), toMin('12:30')],
-  [toMin('14:00'), toMin('16:30')],
-]
-// Shared teachers' subjects first (Youssef, Khadija), across all classes,
-// then each class teacher's own subjects fill the remaining time.
-const SESSIONS = [
-  ['ARTS', 60, 3, 'pm-first'],
-  ['EPS', 60, 2, 'pm-first'],
-  ['LANG_AR', 60, 5, 'any'],
-  ['LANG_FR', 60, 5, 'any'],
-  ['LOGMATH', 45, 4, 'any'],
-  ['EVEIL', 60, 2, 'any'],
-]
-const busy = {} // teacher -> day -> [[s,e]]
-const isFree = (tId, day, s, e) => !(busy[tId]?.[day] ?? []).some(([a, b]) => a < e && s < b)
-const reserve = (tId, day, s, e) => ((busy[tId] ??= {})[day] ??= []).push([s, e])
-const classBusy = classDefs.map(() => ({}))
-const classSlots = classDefs.map(() => [])
-
-for (const [code, len, count, when] of SESSIONS) {
-  for (let ci = 0; ci < classDefs.length; ci++) {
-    const c = classDefs[ci]
-    const tId = owner(c, code)
-    let placed = 0
-    // rotate the starting day per class so shared teachers spread out
-    for (let k = 0; k < 5 && placed < count; k++) {
-      const day = ((k + ci * 2) % 5) + 1
-      const periods = when === 'am' ? PERIODS.slice(0, 2) : when === 'pm-first' ? [PERIODS[2], PERIODS[1], PERIODS[0]] : PERIODS
-      let done = false
-      for (const [ps, pe] of periods) {
-        for (let s = ps; s + len <= pe && !done; s += 15) {
-          const e = s + len
-          const clash = (classBusy[ci][day] ?? []).some(([a, b]) => a < e && s < b)
-          if (!clash && isFree(tId, day, s, e)) {
-            ;(classBusy[ci][day] ??= []).push([s, e])
-            reserve(tId, day, s, e)
-            classSlots[ci].push({ weekday: day, starts_at: hhmm(s), ends_at: hhmm(e), subject_id: subj[code].id, teacher_member_id: tId })
-            placed++
-            done = true
-          }
-        }
-        if (done) break
-      }
-    }
-    if (placed < count) throw new Error(`${c.name}: seulement ${placed}/${count} séances de ${code}`)
-  }
+const lay = (c, weekday, from, blocks) => {
+  let t = toMin(from)
+  return blocks.map(([code, len, title]) => {
+    const slot = { weekday, starts_at: hhmm(t), ends_at: hhmm(t + len), subject_id: subj[code].id, teacher_member_id: owner(c, code), title: title ?? null }
+    t += len
+    return slot
+  })
 }
 
-for (let ci = 0; ci < classDefs.length; ci++) {
-  const c = classDefs[ci]
-  const slots = classSlots[ci]
+for (const c of classDefs) {
+  const slots = []
+  for (const d of [1, 2, 3, 4, 5]) {
+    slots.push(...lay(c, d, '09:30', MORNING[d]))
+    if (WEEK[c.code][d]) slots.push(...lay(c, d, '14:30', WEEK[c.code][d]))
+  }
   const v = must(
     await admin.from('timetable_versions').insert({ school_id: schoolId, class_id: c.id, name: 'Rentrée 2026-2027', effective_from: '2026-09-07' }).select('id').single(),
     'version',
   )
-  must(
-    await admin.from('timetable_slots').insert(slots.map((s) => ({ ...s, school_id: schoolId, class_id: c.id, version_id: v.id }))),
-    `slots ${c.name}`,
-  )
+  must(await admin.from('timetable_slots').insert(slots.map((s) => ({ ...s, school_id: schoolId, class_id: c.id, version_id: v.id }))), `slots ${c.name}`)
   must(await admin.rpc('publish_timetable_version', { p_version_id: v.id }), 'publish')
   const minutes = slots.reduce((a, s) => a + toMin(s.ends_at) - toMin(s.starts_at), 0)
-  console.log(`✓ ${c.name} : ${slots.length} séances, ${minutes / 60} h/semaine, publié`)
+  console.log(`✓ ${c.name} : ${slots.length} activités, ${minutes / 60} h/semaine, publié`)
 }
 
 // ---------------------------------------------------------------- check
-const req = must(await admin.from('class_required_hours').select('class_id, weekly_minutes').in('class_id', classDefs.map((c) => c.id)), 'required')
-const got = must(await admin.from('timetable_slots').select('class_id, starts_at, ends_at').eq('school_id', schoolId), 'placed')
+const req = must(await admin.from('class_required_hours').select('class_id, subject_id, weekly_minutes').in('class_id', classDefs.map((c) => c.id)), 'required')
+const got = must(await admin.from('timetable_slots').select('class_id, subject_id, starts_at, ends_at').eq('school_id', schoolId), 'placed')
 for (const c of classDefs) {
-  const need = req.filter((r) => r.class_id === c.id).reduce((a, r) => a + r.weekly_minutes, 0)
-  const have = got.filter((s) => s.class_id === c.id).reduce((a, s) => a + toMin(s.ends_at) - toMin(s.starts_at), 0)
-  console.log(`  ${c.name}: ${have / 60} h placées / ${need / 60} h requises ${have === need ? '✓' : '✗'}`)
+  const off = req
+    .filter((r) => r.class_id === c.id)
+    .filter((r) => got.filter((s) => s.class_id === c.id && s.subject_id === r.subject_id).reduce((a, s) => a + toMin(s.ends_at) - toMin(s.starts_at), 0) !== r.weekly_minutes)
+  console.log(`  ${c.name}: ${off.length ? `✗ ${off.length} activités mal couvertes` : 'programme couvert à la minute ✓'}`)
 }
-console.log(`\nConnexion admin : ${ADMIN_EMAIL} → menu du compte → « Jardin d'Enfants Al Amal ».`)
+console.log(`\nConnexion admin : ${ADMIN_EMAIL} → menu du compte → « Ptichou Preschool ».`)
 console.log(`Professeurs : ${teacherDefs.map((t) => t.email).join(', ')} — mot de passe ${PASSWORD}`)

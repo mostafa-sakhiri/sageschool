@@ -90,3 +90,19 @@ Auto-generated names such as "1ère année primaire A", "Rentrée 2026-2027" or 
 - **Temporary passwords** are returned once, as an `identifiants.xlsx` download.
 - **Destination banner:** every import zone shows the school and year it writes into. This was added after a test import went into the wrong school because the browser was signed in to another account.
 - **Excel library:** SheetJS 0.20.3, pinned from its official distribution (cdn.sheetjs.com). The copy on npm is stuck at 0.18.5.
+
+## D-017 — Horaires per cycle, stored in `schools.settings.schedules`
+A school with both a préscolaire and a primaire rarely shares one day: the little ones have accueil, goûter, sieste and an early Friday, while the primaire has its own récréations. The single school-wide `settings.opening` (days, day, lunch, recess) is therefore replaced by a list of *horaires*:
+- **Shape:** `{ id, name, cycles: [node codes], days, base: { start, end, pauses[] }, overrides: { weekday: day }, rollCall }`.
+- **Which horaire a class uses:** the one naming the deepest node on the class's path, so a single level could have its own. Failing that, the catch-all horaire (`cycles: []`), which is what a legacy `opening` is read as, so older schools keep working unchanged.
+- **Pauses are the non-teaching moments.** Their kinds are welcome, snack, recess, lunch, nap, care, dismissal and other, each with an optional label. Préscolaire routines are pauses, not subjects: they are the same for every class of the cycle, aren't taught, aren't counted in the hours, and are drawn automatically in every timetable (builder, real week, parent view). This goes against the schema comment suggesting routines as `subjects` rows. That comment still holds for a school that wants them there.
+- **Stored in settings jsonb, no migration:** it's configuration, read as a whole, written only by an admin (`schools_update` policy). The database doesn't enforce slots against pauses. The builder warns instead (overlap with a pause, outside the day, closed day), because a school may legitimately schedule during a pause (an outing).
+- **Roll call:** `rollCall: 'day'` (préscolaire preset) makes attendance default to one call for the whole day instead of one per session.
+- **Wizard:** hours moved from step 1 to step 2. The cycles are chosen first, then each one gets an editable horaire prefilled from its cycle: the préscolaire preset is the Ptichou day; primaire has two récréations and lunch; collège and lycée run 8:00–18:00.
+
+## D-018 — The préscolaire has activities, not subjects
+The `ma_public` template's préscolaire hours were rebuilt from a real private préscolaire timetable (Ptichou Preschool, petite section, 2026-2027). The catalogue is 14 activities totalling 16 h/week, which is exactly the teachable time of the préscolaire horaire (3 h 30 a day, 2 h on Friday).
+- **Codes:** every activity has a code of its own (`RITUEL`, `MOTRICITE`, `ANG_EVEIL`, `ARTS_PLAST`…), so a school with both préscolaire and primaire never merges a préscolaire activity with a primaire subject such as `ARTS`, `EPS` or `ANG`.
+- **Titles:** timetable slots carry the day's precise title ("Parcours moteur • courir, sauter", "Yoga") under the activity, as the PDF does. The grid shows the title first and the activity underneath.
+- **Levels:** the volumes are set for the whole cycle. MS and GS inherit the PS volumes until a school overrides them per level. No official per-level préscolaire volumes were available.
+- **Hours input:** it now accepts quarter hours (pâte à modeler is 4 × 15 min).

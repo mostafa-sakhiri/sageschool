@@ -28,6 +28,8 @@ import { Tag } from '#/components/ui'
 import { WeekGrid, type Block } from './WeekGrid'
 import { membersNamesQuery, slotsQuery, subjectColor, versionsQuery, type Slot, type Version } from './api'
 import { useSchoolDays } from './RealWeek'
+import { dayOf, firstFree, fromMin, slotIssues, weeklyTeachable } from '#/features/setup/schedule'
+import { pauseLabel } from '#/features/setup/ScheduleEditor'
 import { tokens } from '#/theme/theme'
 
 const toMin = (t: string) => {
@@ -174,7 +176,7 @@ function StatusTag({ v }: { v: Version }) {
 function VersionEditor({ classId, version }: { classId: string; version: Version }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
-  const { days, start, end } = useSchoolDays()
+  const { days, start, end, horaire, bands, dayRanges } = useSchoolDays(classId)
   const slots = useQuery(slotsQuery(ctx.school.id, version.id))
   const required = useQuery(requiredHoursQuery(ctx.school.id, classId))
   const subjects = useQuery(subjectsQuery(ctx.school.id))
@@ -193,6 +195,20 @@ function VersionEditor({ classId, version }: { classId: string; version: Version
     return m
   }, [slots.data])
 
+  // "Ajouter une séance": the first free moment of the week, pauses skipped
+  const nextFree = (): Partial<Slot> => {
+    for (const d of days) {
+      const day = horaire ? dayOf(horaire, d) : { start, end, pauses: [] }
+      if (!day) continue
+      const taken = (slots.data ?? []).filter((s) => s.weekday === d).map((s) => ({ start: hhmm(s.starts_at), end: hhmm(s.ends_at) }))
+      const at = firstFree(day, taken, 15)
+      if (at) return { weekday: d, starts_at: at, ends_at: '' }
+    }
+    return { weekday: days[0], starts_at: start, ends_at: '' }
+  }
+  const available = horaire ? weeklyTeachable(horaire) : null
+  const requiredTotal = (required.data ?? []).reduce((a, r) => a + (r.weekly_minutes ?? 0), 0)
+
   if (slots.isPending) return <Loading rows={4} />
   if (slots.isError) return <ErrorState error={slots.error} onRetry={() => slots.refetch()} />
 
@@ -202,7 +218,11 @@ function VersionEditor({ classId, version }: { classId: string; version: Version
     start: s.starts_at,
     end: s.ends_at,
     title: s.title || subjectName(s.subject_id) || '—',
-    lines: [names.data?.[s.teacher_member_id ?? ''] ?? '', rooms.data?.find((r) => r.id === s.room_id)?.name ?? ''].filter(Boolean),
+    lines: [
+      s.title ? (subjectName(s.subject_id) ?? '') : '',
+      names.data?.[s.teacher_member_id ?? ''] ?? '',
+      rooms.data?.find((r) => r.id === s.room_id)?.name ?? '',
+    ].filter(Boolean),
     color: subjectColor(s.subject_id),
     onClick: editable ? () => setEdit(s) : undefined,
   }))
@@ -211,16 +231,36 @@ function VersionEditor({ classId, version }: { classId: string; version: Version
     <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: '1fr 300px' } }}>
       <Stack spacing={1.5}>
         {editable && (
-          <Button startIcon={<AddOutlined />} variant="outlined" onClick={() => setEdit({ weekday: days[0], starts_at: start, ends_at: '' })} sx={{ alignSelf: 'flex-start' }}>
-            {t('tt.addSlot')}
-          </Button>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
+            <Button startIcon={<AddOutlined />} variant="outlined" onClick={() => setEdit(nextFree())} sx={{ alignSelf: 'flex-start' }}>
+              {t('tt.addSlot')}
+            </Button>
+            <Typography variant="body2" color="text.secondary">
+              {t('tt.clickToAdd')}
+            </Typography>
+          </Stack>
         )}
-        <WeekGrid days={days} dayLabels={labels} blocks={blocks} dayStart={start} dayEnd={end} emptyText={t('tt.emptyVersion')} />
+        <WeekGrid
+          days={days}
+          dayLabels={labels}
+          blocks={blocks}
+          bands={bands}
+          dayRanges={dayRanges}
+          dayStart={start}
+          dayEnd={end}
+          emptyText={t('tt.emptyVersion')}
+          onEmptyClick={editable ? (weekday, time) => setEdit({ weekday, starts_at: time, ends_at: '' }) : undefined}
+        />
       </Stack>
       <Paper variant="outlined" sx={{ p: 2, alignSelf: 'start' }}>
         <Typography variant="h5" sx={{ mb: 1.5 }}>
           {t('tt.coverage')}
         </Typography>
+        {available !== null && requiredTotal > 0 && (
+          <Alert severity={requiredTotal > available ? 'warning' : 'info'} icon={false} sx={{ mb: 1.5, py: 0 }}>
+            {t('tt.availability', { program: formatMinutes(requiredTotal, locale), available: formatMinutes(available, locale) })}
+          </Alert>
+        )}
         {(required.data ?? []).length === 0 && <Typography color="text.secondary">{t('classes.noHours')}</Typography>}
         <Stack spacing={1.25}>
           {(required.data ?? []).map((r) => {
@@ -240,7 +280,7 @@ function VersionEditor({ classId, version }: { classId: string; version: Version
           })}
         </Stack>
       </Paper>
-      {edit && <SlotDialog classId={classId} version={version} slot={edit} onClose={() => setEdit(null)} />}
+      {edit && <SlotDialog classId={classId} version={version} slot={edit} taken={slots.data ?? []} onClose={() => setEdit(null)} />}
     </Box>
   )
 }
@@ -249,17 +289,19 @@ function SlotDialog({
   classId,
   version,
   slot,
+  taken,
   onClose,
 }: {
   classId: string
   version: Version
   slot: Partial<Slot>
+  taken: Slot[]
   onClose: () => void
 }) {
   const { t } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
-  const { days } = useSchoolDays()
+  const { days, horaire } = useSchoolDays(classId)
   const required = useQuery(requiredHoursQuery(ctx.school.id, classId))
   const subjects = useQuery(subjectsQuery(ctx.school.id))
   const teachers = useQuery(teachersQuery(ctx.school.id))
@@ -281,11 +323,20 @@ function SlotDialog({
     if (a) setTeacherId(a.teacher_member_id)
     if (!endsAt) {
       const r = required.data?.find((x) => x.subject_id === id)
-      const len = r?.max_session_minutes ?? 60
-      const m = toMin(startsAt) + Math.min(len, 60)
-      setEndsAt(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`)
+      let m = toMin(startsAt) + Math.min(r?.max_session_minutes ?? 60, 60)
+      // stop at the next pause or session, or the end of the day
+      const day = horaire ? dayOf(horaire, weekday) : null
+      const limits = [
+        ...(day ? [day.end, ...day.pauses.map((p) => p.start)] : []),
+        ...taken.filter((s) => s.weekday === weekday && s.id !== slot.id).map((s) => hhmm(s.starts_at)),
+      ]
+        .map(toMin)
+        .filter((x) => x > toMin(startsAt))
+      if (limits.length) m = Math.min(m, ...limits)
+      setEndsAt(fromMin(m))
     }
   }
+  const issues = slotIssues(horaire, weekday, startsAt, endsAt)
 
   const invalidate = () =>
     Promise.all([
@@ -395,6 +446,13 @@ function SlotDialog({
               ))}
             </TextField>
             <TextField label={t('tt.slotTitle')} value={title} onChange={(e) => setTitle(e.target.value)} />
+            {issues.closed && <Alert severity="warning">{t('tt.dayClosed')}</Alert>}
+            {issues.outside && <Alert severity="warning">{t('tt.outsideDay')}</Alert>}
+            {issues.pauses.length > 0 && (
+              <Alert severity="warning">
+                {t('tt.overPause', { pauses: issues.pauses.map((p) => `${pauseLabel(p, t)} ${p.start}–${p.end}`).join(', ') })}
+              </Alert>
+            )}
             {(save.isError || remove.isError) && <Alert severity="error">{errorMessage(save.error ?? remove.error, t)}</Alert>}
           </Stack>
         </DialogContent>

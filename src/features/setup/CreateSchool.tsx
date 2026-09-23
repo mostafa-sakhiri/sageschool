@@ -18,32 +18,12 @@ import { supabase } from '#/lib/supabase/client'
 import { must, errorMessage } from '#/lib/errors'
 import { rememberSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
-import { TEMPLATE, formatMinutes } from '#/features/structure/api'
+import { TEMPLATE } from '#/features/structure/api'
 import { tokens } from '#/theme/theme'
+import { presetHoraire, weeklyTeachable, type Horaire } from './schedule'
+import { ScheduleEditor } from './ScheduleEditor'
 
 type TplNode = { kind: string; code: string; name: string; name_ar?: string; children?: TplNode[] }
-
-const DAYS = ['1', '2', '3', '4', '5', '6'] as const
-
-export type Opening = {
-  days: string[]
-  day: [string, string]
-  lunch: [string, string]
-  recess: [string, string]
-}
-
-const toMin = (s: string) => {
-  const [h, m] = s.split(':').map(Number)
-  return h * 60 + (m || 0)
-}
-
-// Teachable minutes per day: the school day minus lunch and recess.
-export function teachableMinutes(o: Opening) {
-  const day = toMin(o.day[1]) - toMin(o.day[0])
-  const lunch = Math.max(0, toMin(o.lunch[1]) - toMin(o.lunch[0]))
-  const recess = Math.max(0, toMin(o.recess[1]) - toMin(o.recess[0]))
-  return Math.max(0, day - lunch - recess)
-}
 
 function slugify(s: string) {
   return (
@@ -65,13 +45,9 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
   const [city, setCity] = useState('')
   const [address, setAddress] = useState('')
   const [founded, setFounded] = useState('')
-  const [opening, setOpening] = useState<Opening>({
-    days: ['1', '2', '3', '4', '5'],
-    day: ['08:30', '16:30'],
-    lunch: ['12:30', '14:00'],
-    recess: ['10:15', '10:30'],
-  })
   const [cycles, setCycles] = useState<string[]>([])
+  // One horaire per chosen cycle, prefilled from the cycle's usual day
+  const [horaires, setHoraires] = useState<Horaire[]>([])
   const [offLevels, setOffLevels] = useState<string[]>([])
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
@@ -82,7 +58,6 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
       must(await supabase.from('curriculum_templates').select('tree').eq('code', TEMPLATE).single()).tree as TplNode[],
   })
 
-  const perDay = teachableMinutes(opening)
   const levelCount = useMemo(
     () =>
       (template.data ?? [])
@@ -91,6 +66,19 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
         .filter((l) => !offLevels.includes(l.code)).length,
     [template.data, cycles, offLevels],
   )
+
+  const cycleName = (c: TplNode) => (locale === 'ar' && c.name_ar ? c.name_ar : c.name)
+  const toggleCycle = (c: TplNode) => {
+    const on = cycles.includes(c.code)
+    setCycles((cs) => (on ? cs.filter((x) => x !== c.code) : [...cs, c.code]))
+    if (!on && !horaires.some((h) => h.cycles.includes(c.code))) setHoraires((hs) => [...hs, presetHoraire(c.code, c.name)])
+  }
+  // Template order, only the cycles still checked
+  const chosenHoraires = (template.data ?? [])
+    .filter((c) => cycles.includes(c.code))
+    .map((c) => horaires.find((h) => h.cycles.includes(c.code)))
+    .filter((h): h is Horaire => !!h)
+  const noTime = chosenHoraires.some((h) => h.days.length === 0 || weeklyTeachable(h) <= 0)
 
   const create = async () => {
     setBusy(true)
@@ -105,7 +93,7 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
             address,
             founded_on: founded || null,
             levels_offered: cycles,
-            opening,
+            schedules: chosenHoraires,
           },
         }),
       ) as string
@@ -128,13 +116,12 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
   }
 
   if (step === 1) {
-    const dayNames = t('setup.dayNames').split(',')
     return (
       <Stack spacing={2.5}>
         <StepActions
           left={t('setup.step1Foot')}
           onNext={() => onStep(2)}
-          nextDisabled={!name.trim() || opening.days.length === 0 || perDay <= 0}
+          nextDisabled={!name.trim()}
           nextLabel={t('common.continue')}
         />
         <Paper variant="outlined" sx={{ p: 3 }}>
@@ -155,61 +142,6 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
             <TextField label={t('setup.city')} value={city} onChange={(e) => setCity(e.target.value)} />
           </Box>
         </Paper>
-        <Paper variant="outlined" sx={{ p: 3 }}>
-          <Typography variant="h4">{t('setup.hoursTitle')}</Typography>
-          <Typography color="text.secondary" sx={{ mb: 2, mt: 0.5 }}>
-            {t('setup.hoursHint')}
-          </Typography>
-          <Typography variant="h6" sx={{ mb: 1 }}>
-            {t('setup.days')}
-          </Typography>
-          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', mb: 2.5 }}>
-            {DAYS.map((d, i) => {
-              const on = opening.days.includes(d)
-              return (
-                <Chip
-                  key={d}
-                  label={dayNames[i]}
-                  color={on ? 'primary' : 'default'}
-                  variant={on ? 'filled' : 'outlined'}
-                  onClick={() =>
-                    setOpening((o) => ({
-                      ...o,
-                      days: on ? o.days.filter((x) => x !== d) : [...o.days, d].sort(),
-                    }))
-                  }
-                  aria-pressed={on}
-                />
-              )
-            })}
-          </Stack>
-          {(['day', 'lunch', 'recess'] as const).map((k) => (
-            <Stack key={k} direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 1.5, alignItems: { sm: 'center' } }}>
-              <Typography sx={{ width: 160, fontWeight: 500 }}>{t(`setup.period.${k}`)}</Typography>
-              <TextField
-                type="time"
-                label={t('setup.start')}
-                value={opening[k][0]}
-                onChange={(e) => setOpening((o) => ({ ...o, [k]: [e.target.value, o[k][1]] }))}
-                slotProps={{ inputLabel: { shrink: true }, htmlInput: { step: 300 } }}
-              />
-              <TextField
-                type="time"
-                label={t('setup.end')}
-                value={opening[k][1]}
-                onChange={(e) => setOpening((o) => ({ ...o, [k]: [o[k][0], e.target.value] }))}
-                slotProps={{ inputLabel: { shrink: true }, htmlInput: { step: 300 } }}
-              />
-            </Stack>
-          ))}
-          <Alert severity="success" icon={false} sx={{ mt: 1, bgcolor: tokens.accentSoft, color: tokens.accentDark }}>
-            {t('setup.teachable', {
-              perDay: formatMinutes(perDay, locale),
-              days: opening.days.length,
-              total: formatMinutes(perDay * opening.days.length, locale),
-            })}
-          </Alert>
-        </Paper>
       </Stack>
     )
   }
@@ -221,7 +153,7 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
         left={t('setup.levelsCount', { n: levelCount })}
         onBack={() => onStep(1)}
         onNext={create}
-        nextDisabled={cycles.length === 0 || levelCount === 0}
+        nextDisabled={cycles.length === 0 || levelCount === 0 || noTime}
         busy={busy}
         nextLabel={t('setup.createSchool')}
       />
@@ -245,10 +177,10 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
                     control={
                       <Checkbox
                         checked={on}
-                        onChange={() => setCycles((cs) => (on ? cs.filter((x) => x !== c.code) : [...cs, c.code]))}
+                        onChange={() => toggleCycle(c)}
                       />
                     }
-                    label={<Typography sx={{ fontWeight: 600 }}>{locale === 'ar' && c.name_ar ? c.name_ar : c.name}</Typography>}
+                    label={<Typography sx={{ fontWeight: 600 }}>{cycleName(c)}</Typography>}
                   />
                 </FormGroup>
                 {on && (
@@ -276,6 +208,27 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
           })}
         </Stack>
       </Paper>
+      {chosenHoraires.length > 0 && (
+        <Paper variant="outlined" sx={{ p: 3 }}>
+          <Typography variant="h3">{t('setup.hoursTitle')}</Typography>
+          <Typography color="text.secondary" sx={{ mb: 2.5, mt: 0.5 }}>
+            {t(chosenHoraires.length > 1 ? 'sched.hintMany' : 'setup.hoursHint')}
+          </Typography>
+          <ScheduleEditor
+            value={chosenHoraires.map((h) => {
+              const c = template.data?.find((x) => h.cycles.includes(x.code))
+              return c ? { ...h, name: cycleName(c) } : h
+            })}
+            onChange={(list) =>
+              setHoraires((hs) => hs.map((h) => {
+                const edited = list.find((x) => x.id === h.id)
+                // names stay as stored (French content), only the display is localized
+                return edited ? { ...edited, name: h.name } : h
+              }))
+            }
+          />
+        </Paper>
+      )}
     </Stack>
   )
 }

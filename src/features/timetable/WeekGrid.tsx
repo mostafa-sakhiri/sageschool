@@ -15,6 +15,9 @@ export type Block = {
   onClick?: () => void
 }
 
+// Non-teaching moments drawn behind the sessions (récréation, sieste...).
+export type Band = { weekday: number; start: string; end: string; label: string; kind?: string }
+
 const toMin = (t: string) => {
   const [h, m] = t.split(':').map(Number)
   return h * 60 + m
@@ -30,6 +33,9 @@ export function WeekGrid({
   dayEnd = '17:00',
   dayNotes,
   emptyText,
+  bands,
+  dayRanges,
+  onEmptyClick,
 }: {
   days: number[]
   dayLabels: Record<number, string>
@@ -38,9 +44,14 @@ export function WeekGrid({
   dayEnd?: string
   dayNotes?: Record<number, string | undefined>
   emptyText?: string
+  bands?: Band[]
+  // Opening hours of each day: outside is shaded (Friday ending at 12:30)
+  dayRanges?: Record<number, { start: string; end: string } | undefined>
+  // Click on an empty spot of a day: time rounded down to 5 minutes
+  onEmptyClick?: (weekday: number, time: string) => void
 }) {
-  const earliest = Math.min(toMin(dayStart), ...blocks.map((b) => toMin(b.start)))
-  const latest = Math.max(toMin(dayEnd), ...blocks.map((b) => toMin(b.end)))
+  const earliest = Math.min(toMin(dayStart), ...blocks.map((b) => toMin(b.start)), ...(bands ?? []).map((b) => toMin(b.start)))
+  const latest = Math.max(toMin(dayEnd), ...blocks.map((b) => toMin(b.end)), ...(bands ?? []).map((b) => toMin(b.end)))
   const scale = 1.1 // px per minute
   const height = (latest - earliest) * scale
   const hours: number[] = []
@@ -67,10 +78,66 @@ export function WeekGrid({
           ))}
         </Box>
         {days.map((d) => (
-          <Box key={d} sx={{ position: 'relative', height, borderInlineStart: `1px solid ${tokens.lineSoft}` }}>
+          <Box
+            key={d}
+            onClick={
+              onEmptyClick
+                ? (e) => {
+                    const y = e.clientY - e.currentTarget.getBoundingClientRect().top
+                    const m = Math.floor((earliest + y / scale) / 5) * 5
+                    onEmptyClick(d, `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`)
+                  }
+                : undefined
+            }
+            sx={{ position: 'relative', height, borderInlineStart: `1px solid ${tokens.lineSoft}`, cursor: onEmptyClick ? 'copy' : undefined }}
+          >
             {hours.map((m) => (
               <Box key={m} sx={{ position: 'absolute', insetInline: 0, top: (m - earliest) * scale, borderTop: `1px dashed ${tokens.lineSoft}` }} />
             ))}
+            {dayRanges &&
+              (() => {
+                const r = dayRanges[d]
+                const shade = (from: number, to: number, k: string) =>
+                  to > from && (
+                    <Box
+                      key={k}
+                      sx={{
+                        position: 'absolute',
+                        insetInline: 0,
+                        top: (from - earliest) * scale,
+                        height: (to - from) * scale,
+                        bgcolor: tokens.paper,
+                        backgroundImage: `repeating-linear-gradient(135deg, transparent 0 6px, ${tokens.lineSoft} 6px 7px)`,
+                      }}
+                    />
+                  )
+                return r ? [shade(earliest, toMin(r.start), 'b'), shade(toMin(r.end), latest, 'a')] : shade(earliest, latest, 'x')
+              })()}
+            {(bands ?? [])
+              .filter((b) => b.weekday === d)
+              .map((b, i) => (
+                <Box
+                  key={`band-${i}`}
+                  title={`${b.label} ${hhmm(b.start)}–${hhmm(b.end)}`}
+                  sx={{
+                    position: 'absolute',
+                    insetInline: 4,
+                    top: (toMin(b.start) - earliest) * scale,
+                    height: Math.max(12, (toMin(b.end) - toMin(b.start)) * scale - 2),
+                    borderRadius: '8px',
+                    bgcolor: b.kind === 'nap' ? '#EFEBF6' : b.kind === 'recess' ? '#FBF3E3' : '#F4F1EA',
+                    border: `1px dashed ${tokens.line}`,
+                    px: 0.75,
+                    display: 'flex',
+                    alignItems: 'center',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <Typography noWrap sx={{ fontSize: 11, color: tokens.inkMuted, fontStyle: 'italic' }}>
+                    {(toMin(b.end) - toMin(b.start)) * scale >= 20 ? `${hhmm(b.start)} ${b.label}` : b.label}
+                  </Typography>
+                </Box>
+              ))}
             {blocks
               .filter((b) => b.weekday === d)
               .map((b) => {
@@ -79,7 +146,10 @@ export function WeekGrid({
                 return (
                   <ButtonBase
                     key={b.key}
-                    onClick={b.onClick}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      b.onClick?.()
+                    }}
                     disabled={!b.onClick}
                     aria-label={`${b.title} ${hhmm(b.start)}–${hhmm(b.end)} ${(b.lines ?? []).join(' ')}`}
                     sx={{
@@ -108,7 +178,7 @@ export function WeekGrid({
                       </Typography>
                     </Stack>
                     {b.badge && <Typography sx={{ fontSize: 11, fontWeight: 700, color: tokens.warnInk }}>{b.badge}</Typography>}
-                    {(b.lines ?? []).map((l, i) => (
+                    {(b.lines ?? []).slice(0, Math.max(0, Math.floor((h - 22) / 16))).map((l, i) => (
                       <Typography key={i} noWrap sx={{ fontSize: 11.5, opacity: 0.85 }}>
                         {l}
                       </Typography>
