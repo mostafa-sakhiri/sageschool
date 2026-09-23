@@ -2200,6 +2200,10 @@ export type Database = {
         }
         Returns: number
       }
+      change_member_role: {
+        Args: { p_member_id: string; p_role: string }
+        Returns: string
+      }
       classes_under_node: {
         Args: { p_academic_year_id?: string; p_node_id: string }
         Returns: {

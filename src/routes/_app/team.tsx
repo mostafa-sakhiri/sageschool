@@ -6,6 +6,7 @@ import {
   Avatar,
   Box,
   Button,
+  IconButton,
   Paper,
   Stack,
   Switch,
@@ -16,8 +17,10 @@ import {
   TableRow,
   Tab,
   Tabs,
+  Tooltip,
   Typography,
 } from '@mui/material'
+import EditOutlined from '@mui/icons-material/EditOutlined'
 import PersonAddOutlined from '@mui/icons-material/PersonAddOutlined'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, Tag, initials } from '#/components/ui'
@@ -28,6 +31,7 @@ import { supabase } from '#/lib/supabase/client'
 import { errorMessage, must } from '#/lib/errors'
 import { InviteDialog } from '#/features/team/InviteDialog'
 import { membersQuery, type MemberRow } from '#/features/team/api'
+import { RoleDialog, type RoleOutcome } from '#/features/team/RoleDialog'
 import { ImportDialog } from '#/features/import/ImportZone'
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
 import { tokens } from '#/theme/theme'
@@ -54,6 +58,8 @@ function TeamPage() {
   const search = Route.useSearch()
   const navigateSelf = Route.useNavigate()
   const [importing, setImporting] = useState(false)
+  const [editing, setEditing] = useState<MemberRow | null>(null)
+  const [changed, setChanged] = useState<{ outcome: RoleOutcome; name: string; role: Role } | null>(null)
   useEffect(() => {
     if (!search.import) return
     setImporting(true)
@@ -91,6 +97,11 @@ function TeamPage() {
         <Tab value="staff" label={t('team.tab.staff')} />
         <Tab value="families" label={t('team.tab.families')} />
       </Tabs>
+      {changed && changed.outcome !== 'unchanged' && (
+        <Alert severity={changed.outcome === 'added' ? 'info' : 'success'} onClose={() => setChanged(null)} sx={{ mb: 2 }}>
+          {t(`team.roleChanged.${changed.outcome}`, { name: changed.name, role: t(`role.${changed.role}`) })}
+        </Alert>
+      )}
       {toggle.isError && <Alert severity="error" sx={{ mb: 2 }}>{errorMessage(toggle.error, t)}</Alert>}
       <QueryState query={members} rows={5}>
         {(rows) => {
@@ -126,7 +137,16 @@ function TeamPage() {
                         {m.user?.email ?? '—'}
                       </TableCell>
                       <TableCell>
-                        <Tag tone={m.role === 'admin' ? 'ok' : m.role === 'teacher' ? 'info' : 'neutral'} label={t(`role.${m.role}`)} />
+                        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                          <Tag tone={m.role === 'admin' ? 'ok' : m.role === 'teacher' ? 'info' : 'neutral'} label={t(`role.${m.role}`)} />
+                          {STAFF_ROLES.includes(m.role) && m.user?.id !== ctx.user.id && (
+                            <Tooltip title={t('team.changeRole')}>
+                              <IconButton size="small" aria-label={`${t('team.changeRole')} — ${m.user?.full_name}`} onClick={() => setEditing(m)}>
+                                <EditOutlined sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </Stack>
                       </TableCell>
                       <TableCell>
                         <Switch
@@ -149,6 +169,14 @@ function TeamPage() {
           {t('team.footnote')}
         </Typography>
       </Box>
+      {editing && (
+        <RoleDialog
+          member={editing}
+          schoolId={ctx.school.id}
+          onClose={() => setEditing(null)}
+          onDone={(outcome, role) => setChanged({ outcome, role, name: editing.user?.full_name ?? '' })}
+        />
+      )}
       <ImportDialog open={importing} onClose={() => setImporting(false)} kinds={['teachers', 'administration']} title={t('import.staffTitle')} />
       <InviteDialog
         open={open}
