@@ -12,6 +12,8 @@ import MenuBookOutlined from '@mui/icons-material/MenuBookOutlined'
 import ForumOutlined from '@mui/icons-material/ForumOutlined'
 import DomainAddOutlined from '@mui/icons-material/DomainAddOutlined'
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
+import HowToRegOutlined from '@mui/icons-material/HowToRegOutlined'
+import EventNoteOutlined from '@mui/icons-material/EventNoteOutlined'
 import { useI18n } from '#/i18n/i18n'
 import { useSchool, type Role } from '#/lib/session'
 import { AddStudentDialog } from '#/features/students/AddStudentDialog'
@@ -30,6 +32,7 @@ type Action = {
   to?: string
   new?: boolean
   importParam?: boolean
+  fees?: boolean
 }
 
 // Most frequent actions per role, one click from any page. Dialogs open in
@@ -40,7 +43,10 @@ const ACTIONS: Action[] = [
   { key: 'quick.attendance', icon: <FactCheckOutlined fontSize="small" />, roles: ['admin', 'staff', 'teacher'], to: '/attendance' },
   { key: 'quick.homework', icon: <MenuBookOutlined fontSize="small" />, roles: ['teacher'], to: '/homework', new: true },
   { key: 'quick.announcement', icon: <CampaignOutlined fontSize="small" />, roles: ['admin', 'staff'], to: '/announcements', new: true },
-  { key: 'quick.payment', icon: <PaymentsOutlined fontSize="small" />, roles: ['admin', 'staff'], to: '/fees' },
+  { key: 'quick.payment', icon: <PaymentsOutlined fontSize="small" />, roles: ['admin', 'staff'], to: '/fees', fees: true },
+  { key: 'quick.preregistration', icon: <HowToRegOutlined fontSize="small" />, roles: ['admin', 'staff'], to: '/preregistrations', new: true },
+  { key: 'quick.appointment', icon: <EventNoteOutlined fontSize="small" />, roles: ['admin', 'staff'], to: '/agenda', new: true },
+  { key: 'quick.complaint', icon: <ForumOutlined fontSize="small" />, roles: ['admin', 'staff'], to: '/cases', new: true },
   { key: 'quick.writeSchool', icon: <ForumOutlined fontSize="small" />, roles: ['parent'], to: '/cases', new: true },
   { key: 'quick.justify', icon: <FactCheckOutlined fontSize="small" />, roles: ['parent'], to: '/attendance' },
   { key: 'quick.member', icon: <PersonAddOutlined fontSize="small" />, roles: ['admin'], dialog: 'member' },
@@ -58,7 +64,7 @@ export function QuickActions({ onDone }: { onDone?: () => void }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const [dialog, setDialog] = useState<Dialogs>(null)
 
-  const actions = ACTIONS.filter((a) => a.roles.includes(ctx.role))
+  const actions = ACTIONS.filter((a) => a.roles.includes(ctx.role) && (!a.fees || ctx.canFees))
   if (!actions.length) return null
 
   const run = (a: Action) => {

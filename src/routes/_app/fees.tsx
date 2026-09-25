@@ -29,10 +29,10 @@ import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
 import { errorMessage, must } from '#/lib/errors'
-import { formatDate, formatMoney, todayIso } from '#/lib/format'
+import { formatDate, formatDateTime, formatMoney, formatPhone, todayIso } from '#/lib/format'
 import { nodeLabel, nodesQuery } from '#/features/structure/api'
 import { classesQuery } from '#/features/classes/api'
-import { currentEnrollment, studentsQuery } from '#/features/students/api'
+import { currentEnrollment, studentsQuery, type Guardian } from '#/features/students/api'
 import { tokens } from '#/theme/theme'
 import { balancesQuery, type Balance } from '#/features/queries'
 
@@ -50,15 +50,30 @@ const STATUS_TONE: Record<Balance['payment_status'], Tone> = {
 function FeesPage() {
   const { t, locale } = useI18n()
   const ctx = useSchool()
-  const balances = useQuery({ ...balancesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year })
+  const balances = useQuery({ ...balancesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year && (ctx.canFees || !ctx.isOffice) })
   const students = useQuery(studentsQuery(ctx.school.id))
-  const [filter, setFilter] = useState<'all' | 'open' | 'overdue'>('all')
+  const [filter, setFilter] = useState<'all' | 'open' | 'overdue' | 'toRemind'>('all')
   const [paying, setPaying] = useState<Balance | null>(null)
+  const [reminding, setReminding] = useState<Balance | null>(null)
+  const reminders = useQuery({
+    queryKey: ['school', ctx.school.id, 'reminders', ctx.year?.id],
+    enabled: !!ctx.year && ctx.canFees,
+    queryFn: async () =>
+      Object.fromEntries(
+        must(await supabase.from('installment_reminders').select('installment_id, last_reminded_at, reminder_count')).map((r) => [r.installment_id, r]),
+      ) as Record<string, { last_reminded_at: string | null; reminder_count: number | null }>,
+  })
   const [planOpen, setPlanOpen] = useState(false)
 
   const name = (id: string) => fullName(students.data?.find((s) => s.id === id))
   const rows = (balances.data ?? []).filter((b) =>
-    filter === 'all' ? true : filter === 'overdue' ? b.payment_status === 'overdue' : ['pending', 'partial', 'overdue'].includes(b.payment_status),
+    filter === 'all'
+      ? true
+      : filter === 'overdue'
+        ? b.payment_status === 'overdue'
+        : filter === 'toRemind'
+          ? b.payment_status === 'overdue' && !reminders.data?.[b.id]
+          : ['pending', 'partial', 'overdue'].includes(b.payment_status),
   )
   const totals = useMemo(() => {
     const all = balances.data ?? []
@@ -69,6 +84,12 @@ function FeesPage() {
     }
   }, [balances.data])
 
+  if (ctx.isOffice && !ctx.canFees)
+    return (
+      <AppShell title={t('nav.fees')}>
+        <EmptyState title={t('fees.noAccess')} hint={t('fees.noAccessHint')} />
+      </AppShell>
+    )
   if (!ctx.year)
     return (
       <AppShell title={t('nav.fees')}>
@@ -79,10 +100,10 @@ function FeesPage() {
   return (
     <AppShell title={t('nav.fees')}>
       <PageIntro
-        title={ctx.isOffice ? t('fees.title') : t('fees.titleParent')}
-        subtitle={ctx.isOffice ? t('fees.subtitle') : t('fees.subtitleParent')}
+        title={ctx.canFees ? t('fees.title') : t('fees.titleParent')}
+        subtitle={ctx.canFees ? t('fees.subtitle') : t('fees.subtitleParent')}
         actions={
-          ctx.isOffice && (
+          ctx.canFees && (
             <Button variant="contained" onClick={() => setPlanOpen(true)}>
               {t('fees.generate')}
             </Button>
@@ -99,11 +120,12 @@ function FeesPage() {
         <ToggleButton value="all">{t('common.all')}</ToggleButton>
         <ToggleButton value="open">{t('fees.open')}</ToggleButton>
         <ToggleButton value="overdue">{t('fees.overdue')}</ToggleButton>
+        {ctx.canFees && <ToggleButton value="toRemind">{t('fees.toRemind')}</ToggleButton>}
       </ToggleButtonGroup>
       <QueryState
         query={balances}
         rows={5}
-        empty={(d) => (d.length === 0 ? <EmptyState title={t('fees.empty')} hint={ctx.isOffice ? t('fees.emptyHint') : undefined} /> : null)}
+        empty={(d) => (d.length === 0 ? <EmptyState title={t('fees.empty')} hint={ctx.canFees ? t('fees.emptyHint') : undefined} /> : null)}
       >
         {() => (
           <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
@@ -117,7 +139,7 @@ function FeesPage() {
                   <TableCell align="right">{t('fees.paid')}</TableCell>
                   <TableCell align="right">{t('fees.remaining')}</TableCell>
                   <TableCell>{t('common.status')}</TableCell>
-                  {ctx.isOffice && <TableCell />}
+                  {ctx.canFees && <TableCell />}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -132,15 +154,35 @@ function FeesPage() {
                       {formatMoney(b.amount_remaining, locale)}
                     </TableCell>
                     <TableCell>
-                      <Tag tone={STATUS_TONE[b.payment_status]} label={t(`fees.status.${b.payment_status}`)} />
+                      {(() => {
+                        const r = ctx.canFees ? reminders.data?.[b.id] : undefined
+                        const open = ['overdue', 'partial', 'pending'].includes(b.payment_status)
+                        if (r && open)
+                          return (
+                            <Stack spacing={0.25}>
+                              <Tag tone="warn" label={t('fees.status.reminded')} />
+                              <Typography sx={{ fontSize: 12, color: tokens.inkMuted, whiteSpace: 'nowrap' }}>
+                                {t('fees.remindedOn', { date: formatDate(r.last_reminded_at, locale), n: r.reminder_count ?? 1 })}
+                              </Typography>
+                            </Stack>
+                          )
+                        return <Tag tone={STATUS_TONE[b.payment_status]} label={t(`fees.status.${b.payment_status}`)} />
+                      })()}
                     </TableCell>
-                    {ctx.isOffice && (
+                    {ctx.canFees && (
                       <TableCell align="right">
-                        {Number(b.amount_remaining) > 0 && b.payment_status !== 'cancelled' && (
-                          <Button size="small" onClick={() => setPaying(b)}>
-                            {t('fees.record')}
-                          </Button>
-                        )}
+                        <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
+                          {b.payment_status === 'overdue' && (
+                            <Button size="small" color="warning" onClick={() => setReminding(b)}>
+                              {t('fees.remind')}
+                            </Button>
+                          )}
+                          {Number(b.amount_remaining) > 0 && b.payment_status !== 'cancelled' && (
+                            <Button size="small" onClick={() => setPaying(b)}>
+                              {t('fees.record')}
+                            </Button>
+                          )}
+                        </Stack>
                       </TableCell>
                     )}
                   </TableRow>
@@ -150,13 +192,21 @@ function FeesPage() {
           </Paper>
         )}
       </QueryState>
-      {!ctx.isOffice && (
+      {!ctx.canFees && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
           {t('fees.parentNote')}
         </Typography>
       )}
       {paying && <PaymentDialog balance={paying} studentName={name(paying.student_id)} onClose={() => setPaying(null)} />}
       {planOpen && <PlanDialog onClose={() => setPlanOpen(false)} />}
+      {reminding && (
+        <ReminderDialog
+          balance={reminding}
+          studentName={name(reminding.student_id)}
+          payers={students.data?.find((s) => s.id === reminding.student_id)?.guardians ?? []}
+          onClose={() => setReminding(null)}
+        />
+      )}
     </AppShell>
   )
 }
@@ -355,6 +405,105 @@ function PlanDialog({ onClose }: { onClose: () => void }) {
         <Button onClick={onClose}>{t('common.cancel')}</Button>
         <Button variant="contained" onClick={() => generate.mutate()} loading={generate.isPending} disabled={!name || !(Number(amount) >= 0) || targets.length === 0}>
           {t('fees.generateAction')}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+// A reminder for an overdue installment: logged (date, channel, who); by
+// WhatsApp/SMS/e-mail a message (simulated) goes to the paying parents. The
+// status then reads "en retard · relancé le …".
+function ReminderDialog({
+  balance,
+  studentName,
+  payers,
+  onClose,
+}: {
+  balance: Balance
+  studentName: string
+  payers: Guardian[]
+  onClose: () => void
+}) {
+  const { t, locale } = useI18n()
+  const ctx = useSchool()
+  const queryClient = useQueryClient()
+  const [channel, setChannel] = useState<'whatsapp' | 'sms' | 'phone' | 'email' | 'in_person' | 'letter'>('whatsapp')
+  const [note, setNote] = useState('')
+  const history = useQuery({
+    queryKey: ['school', ctx.school.id, 'reminders-of', balance.id],
+    queryFn: async () =>
+      must(
+        await supabase
+          .from('payment_reminders')
+          .select('id, channel, note, created_at, by:school_members(user:users(full_name))')
+          .eq('installment_id', balance.id)
+          .order('created_at', { ascending: false }),
+      ) as unknown as { id: string; channel: string; note: string | null; created_at: string; by: { user: { full_name: string } | null } | null }[],
+  })
+  const save = useMutation({
+    mutationFn: async () =>
+      must(await supabase.from('payment_reminders').insert({ school_id: ctx.school.id, installment_id: balance.id, channel, note: note.trim() || null })),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'reminders'] })
+      await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'reminders-of', balance.id] })
+      onClose()
+    },
+  })
+  const shown = payers.filter((g) => g.is_payer).length ? payers.filter((g) => g.is_payer) : payers
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>{t('fees.remindTitle')}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <Typography>
+            <strong>{studentName}</strong> · {balance.label} · {t('fees.remainingAmount', { amount: formatMoney(balance.amount_remaining, locale) })} ·{' '}
+            {t('fees.dueSince', { date: formatDate(balance.due_on, locale) })}
+          </Typography>
+          <Box>
+            {shown.length === 0 && <Alert severity="warning">{t('students.noParent')}</Alert>}
+            {shown.map((g) => (
+              <Typography key={g.guardian_member_id} sx={{ fontSize: 14 }}>
+                {g.member?.user?.full_name}
+                {g.member?.user?.phone && (
+                  <Box component="a" href={`tel:${g.member.user.phone}`} dir="ltr" sx={{ ml: 1, color: tokens.accentDark, fontWeight: 600 }}>
+                    {formatPhone(g.member.user.phone)}
+                  </Box>
+                )}
+              </Typography>
+            ))}
+          </Box>
+          <TextField select label={t('fees.remindChannel')} value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)}>
+            {(['whatsapp', 'sms', 'phone', 'email', 'in_person', 'letter'] as const).map((c) => (
+              <MenuItem key={c} value={c}>
+                {t(`fees.remindChannels.${c}`)}
+              </MenuItem>
+            ))}
+          </TextField>
+          {['whatsapp', 'sms', 'email'].includes(channel) && (
+            <Typography variant="body2" color="text.secondary">
+              {t('fees.remindStub')}
+            </Typography>
+          )}
+          <TextField label={t('fees.remindNote')} value={note} onChange={(e) => setNote(e.target.value)} multiline minRows={2} placeholder={t('fees.remindNotePlaceholder')} />
+          {save.isError && <Alert severity="error">{errorMessage(save.error, t)}</Alert>}
+          {(history.data ?? []).length > 0 && (
+            <>
+              <Typography variant="h6">{t('fees.remindHistory')}</Typography>
+              {(history.data ?? []).map((h) => (
+                <Typography key={h.id} sx={{ fontSize: 13, color: tokens.inkSoft }}>
+                  {formatDateTime(h.created_at, locale)} · {t(`fees.remindChannels.${h.channel}`)} · {h.by?.user?.full_name}
+                  {h.note ? ` — ${h.note}` : ''}
+                </Typography>
+              ))}
+            </>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+        <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending}>
+          {t('fees.remindSave')}
         </Button>
       </DialogActions>
     </Dialog>

@@ -8,6 +8,7 @@ import {
   resolveYear,
   schoolYearsQuery,
   sessionQuery,
+  staffFeesAccess,
   useSelectionVersion,
   type SchoolCtx,
 } from '#/lib/session'
@@ -82,6 +83,7 @@ function AppLayout() {
     years: years.data ?? [],
     isOffice: active.member!.role === 'admin' || active.member!.role === 'staff',
     isAdmin: active.member!.role === 'admin',
+    canFees: active.member!.role === 'admin' || (active.member!.role === 'staff' && staffFeesAccess(active.school.settings)),
   }
   return (
     <SchoolContext.Provider value={ctx}>

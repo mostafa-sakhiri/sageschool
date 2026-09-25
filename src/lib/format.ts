@@ -46,3 +46,31 @@ export function addDays(iso: string, n: number) {
 export function mondayOf(iso: string) {
   return addDays(iso, 1 - isoWeekday(iso))
 }
+
+// Moroccan numbers: 06/07/05 xx xx xx xx -> +2126..., 00 -> +. Empty stays empty.
+export function normalizePhone(v: string | null | undefined) {
+  let s = String(v ?? '').replace(/[^\d+]/g, '')
+  if (!s) return ''
+  if (s.startsWith('00')) s = `+${s.slice(2)}`
+  if (/^0[5-7]\d{8}$/.test(s)) s = `+212${s.slice(1)}`
+  return s
+}
+
+// +212612345678 -> +212 6 12 34 56 78 (display only)
+export function formatPhone(v: string | null | undefined) {
+  if (!v) return ''
+  const m = /^\+212(\d)(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(v)
+  return m ? `+212 ${m[1]} ${m[2]} ${m[3]} ${m[4]} ${m[5]}` : v
+}
+
+export function nowTime() {
+  const d = new Date()
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+// "08:30" -> 510
+export const toMinutes = (t: string | null | undefined) => {
+  if (!t) return null
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}

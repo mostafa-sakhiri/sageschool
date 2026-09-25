@@ -106,3 +106,26 @@ The `ma_public` template's préscolaire hours were rebuilt from a real private p
 - **Titles:** timetable slots carry the day's precise title ("Parcours moteur • courir, sauter", "Yoga") under the activity, as the PDF does. The grid shows the title first and the activity underneath.
 - **Levels:** the volumes are set for the whole cycle. MS and GS inherit the PS volumes until a school overrides them per level. No official per-level préscolaire volumes were available.
 - **Hours input:** it now accepts quarter hours (pâte à modeler is 4 × 15 min).
+
+## D-019 — Office follow-up: secrétariat and administration
+Additive migrations `20260926090000_office_followup.sql` and `20260926090100_staff_presence_expected.sql`. Choices made where the request left room:
+- **Scolarité for the secrétariat:** off by default ("aucun accès"), switched on by the admin in Réglages › L'école. It is `schools.settings.staff_fees_access`, read by `private.can_manage_fees()` in the fee, payment and reminder policies, so RLS enforces it; the menu, quick actions and the page only reflect it.
+- **Phones:** `users.phone` already existed. The invite dialog takes a phone number. Staff, parents and oneself are edited through `update_member_contact()`: the admin can edit anyone, the secrétariat can edit families, and everyone can edit themselves. Moroccan numbers are stored as +212…. Parents moved from Équipe to Élèves › Parents.
+- **Complaints entered by the secrétariat:** `cases.channel` (app, phone, in person, other) and `cases.for_admin`. The first message is the parent's words, so the case stays open and nothing is sent to the parent. The parent still sees the case in their messages, with who entered it.
+- **Alerts:** `student_alerts`, of kind `absence_streak` (automatic) or `manual`.
+  - An `absence_streak` alert is created by a trigger after 3 consecutive school days (Monday to Friday) with an `absent` record, whether for a session or the whole day. A weekend does not break a streak.
+  - A streak that grows updates the same alert, and reopens it if it had been marked notified.
+  - Status goes à prévenir → parent prévenu (green, with who and when) → close.
+- **Parent notified about a single absence:** `attendance_records.parent_notified_at` (and who). The toggle appears on the roll call and on the dashboard's absences of the day.
+- **Teacher arrivals and departures:** `staff_presence`, one row per person per day.
+  - Planned hours are the first and last session of the day (`teacher_day`), stored with the record so a later timetable change does not rewrite history.
+  - Shown in red: a late arrival or early departure of more than 5 minutes, an absence, and 3 or more such incidents in the month ("excès"). Staying after the last class is shown as information, not in red.
+- **Agenda:** `appointments`, one row per visit: parent visit, student visit, enrolment, meeting or other. Times are stored as timestamptz from the browser's local time.
+- **Pre-registrations:** `preinscriptions` plus `preinscription_followups`.
+  - Logging a follow-up sets `last_followup_at` and `followup_count` through a trigger.
+  - A fiche is "à relancer" when its planned date has come, or 7 days after the last follow-up when no date is planned.
+  - Enrolling from a fiche opens the enrolment dialog prefilled and marks the fiche as enrolled.
+- **Enrolment:** the dialog picks the school year and, for whoever handles fees, the monthly amount (taken from the year's latest monthly fee plan). Every month of the year becomes an installment, and the months ticked as paid get their payment right away. There is an optional registration fee.
+- **Late payments:** "updating the status" is a new displayed state, "en retard · relancé le … (n×)", computed from `payment_reminders`. The payment status itself stays computed by `installment_balances` (D-012). A reminder by WhatsApp, SMS or e-mail stubs a message to the paying parents.
+- **"Appel":** relabelled "appel des présences" everywhere. The menu item is now "Présences", and the office gets three tabs: students, teachers, alerts.
+- **Teachers' timetables:** a teacher already saw their own week. The office gets a "Par professeur" tab to look at any teacher's week.

@@ -10,13 +10,16 @@ import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
 import { must } from '#/lib/errors'
-import { formatDate, formatMoney, hhmm, todayIso } from '#/lib/format'
+import { addDays, formatDate, formatMoney, hhmm, todayIso } from '#/lib/format'
+import { alertsQuery } from '#/features/attendance/api'
+import { followupDue, preregsQuery } from '#/features/preregistrations/api'
 import { classesQuery } from '#/features/classes/api'
 import { currentEnrollment, studentsQuery } from '#/features/students/api'
 import { subjectsQuery } from '#/features/structure/api'
 import { membersNamesQuery, subjectColor, type DaySession, type TeacherSession } from '#/features/timetable/api'
 import { announcementsQuery, balancesQuery, casesQuery, homeworkQuery } from '#/features/queries'
 import { subjectTokens, tokens } from '#/theme/theme'
+import { ParentNotified } from '#/features/attendance/ParentNotified'
 
 export const Route = createFileRoute('/_app/')({ component: Dashboard })
 
@@ -35,7 +38,7 @@ function Dashboard() {
   )
 }
 
-type Todo = { key: string; title: string; detail?: string; to: string; action: string; urgent?: boolean }
+type Todo = { key: string; title: string; detail?: string; to: string; search?: Record<string, string>; action: string; urgent?: boolean }
 
 function TodoList({ items }: { items: Todo[] }) {
   const { t } = useI18n()
@@ -69,7 +72,7 @@ function TodoList({ items }: { items: Todo[] }) {
             <Typography sx={{ fontWeight: 600, fontSize: 15 }}>{a.title}</Typography>
             {a.detail && <Typography sx={{ fontSize: 13, color: tokens.inkSoft }}>{a.detail}</Typography>}
           </Box>
-          <Button component={Link} to={a.to} variant={a.urgent ? 'contained' : 'outlined'} size="small">
+          <Button component={Link} to={a.to} search={a.search as never} variant={a.urgent ? 'contained' : 'outlined'} size="small">
             {a.action}
           </Button>
         </Paper>
@@ -84,24 +87,48 @@ function OfficeDash() {
   const students = useQuery(studentsQuery(ctx.school.id))
   const classes = useQuery({ ...classesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year })
   const cases = useQuery(casesQuery(ctx.school.id))
-  const balances = useQuery({ ...balancesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year })
+  const balances = useQuery({ ...balancesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year && ctx.canFees })
   const published = useQuery({
     queryKey: ['school', ctx.school.id, 'published-classes'],
     queryFn: async () =>
       new Set(must(await supabase.from('timetable_versions').select('class_id').eq('school_id', ctx.school.id).eq('status', 'published')).map((v) => v.class_id)),
   })
   const today = todayIso()
+  const alerts = useQuery(alertsQuery(ctx.school.id))
+  const preregs = useQuery(preregsQuery(ctx.school.id))
+  const appointments = useQuery({
+    queryKey: ['school', ctx.school.id, 'appointments', 'day', today],
+    queryFn: async () =>
+      must(
+        await supabase
+          .from('appointments')
+          .select('id, title, starts_at, status')
+          .eq('school_id', ctx.school.id)
+          .eq('status', 'planned')
+          .gte('starts_at', new Date(`${today}T00:00:00`).toISOString())
+          .lt('starts_at', new Date(`${addDays(today, 1)}T00:00:00`).toISOString())
+          .order('starts_at'),
+      ),
+  })
+  const reminders = useQuery({
+    queryKey: ['school', ctx.school.id, 'reminders', ctx.year?.id],
+    enabled: !!ctx.year && ctx.canFees,
+    queryFn: async () =>
+      Object.fromEntries(
+        must(await supabase.from('installment_reminders').select('installment_id, last_reminded_at, reminder_count')).map((r) => [r.installment_id, r]),
+      ) as Record<string, { last_reminded_at: string | null; reminder_count: number | null }>,
+  })
   const absences = useQuery({
     queryKey: ['school', ctx.school.id, 'absences-day', today],
     queryFn: async () =>
       must(
         await supabase
           .from('attendance_records')
-          .select('id, status, justification, student:students(first_name, last_name), class:classes(name)')
+          .select('id, status, justification, parent_notified_at, student:students(first_name, last_name), class:classes(name)')
           .eq('school_id', ctx.school.id)
           .eq('session_date', today)
           .neq('status', 'present'),
-      ) as unknown as { id: string; status: string; student: { first_name: string; last_name: string }; class: { name: string } }[],
+      ) as unknown as { id: string; status: string; parent_notified_at: string | null; student: { first_name: string; last_name: string }; class: { name: string } }[],
   })
 
   if (!ctx.year)
@@ -117,11 +144,29 @@ function OfficeDash() {
   const noTimetable = classRows.filter((c) => !published.data?.has(c.id))
   // Only this year's classes count (the query covers every year of the school).
   const publishedCount = classRows.filter((c) => published.data?.has(c.id)).length
-  const openCases = (cases.data ?? []).filter((c) => c.status === 'open')
+  const forAdmin = (cases.data ?? []).filter((c) => c.for_admin && c.status !== 'resolved')
+  // The admin sees complaints addressed to them in their own line, not twice
+  const openCases = (cases.data ?? []).filter((c) => c.status === 'open' && !(ctx.isAdmin && c.for_admin))
+  const openAlerts = (alerts.data ?? []).filter((a) => a.status === 'open')
+  const dueFollowups = (preregs.data ?? []).filter((p) => followupDue(p, today))
+  const notReminded = (balances.data ?? []).filter((b) => b.payment_status === 'overdue' && !reminders.data?.[b.id])
   const overdue = (balances.data ?? []).filter((b) => b.payment_status === 'overdue')
   const noParent = studentRows.filter((s) => s.guardians.length === 0)
 
+  const nameOf = (id: string) => fullName(studentRows.find((s) => s.id === id))
   const todos: Todo[] = [
+    ...(openAlerts.length
+      ? [{ key: 'alerts', title: t('dash.openAlerts', { n: openAlerts.length }), detail: openAlerts.slice(0, 3).map((a) => nameOf(a.student_id)).join(', '), to: '/attendance', search: { tab: 'alerts' }, action: t('dash.notifyParents'), urgent: true }]
+      : []),
+    ...(ctx.isAdmin && forAdmin.length
+      ? [{ key: 'forAdmin', title: t('dash.complaintsForAdmin', { n: forAdmin.length }), detail: forAdmin[0].subject, to: '/cases', action: t('dash.answer'), urgent: true }]
+      : []),
+    ...((appointments.data ?? []).length
+      ? [{ key: 'agenda', title: t('dash.appointmentsToday', { n: appointments.data!.length }), detail: appointments.data!.slice(0, 3).map((a) => `${new Date(a.starts_at).toTimeString().slice(0, 5)} ${a.title}`).join(' · '), to: '/agenda', action: t('dash.seeAgenda') }]
+      : []),
+    ...(dueFollowups.length
+      ? [{ key: 'prereg', title: t('dash.followupsDue', { n: dueFollowups.length }), detail: dueFollowups.slice(0, 3).map((p) => `${p.child_first_name} ${p.child_last_name}`).join(', '), to: '/preregistrations', action: t('dash.followUp') }]
+      : []),
     ...(openCases.length ? [{ key: 'cases', title: t('dash.openCases', { n: openCases.length }), detail: openCases[0].subject, to: '/cases', action: t('dash.answer'), urgent: true }] : []),
     ...(classRows.length === 0 ? [{ key: 'classes', title: t('dash.noClasses'), to: '/classes', action: t('dash.createClasses'), urgent: true }] : []),
     ...(noTimetable.length && classRows.length
@@ -130,7 +175,15 @@ function OfficeDash() {
     ...(unplaced.length ? [{ key: 'unplaced', title: t('dash.unplaced', { n: unplaced.length }), detail: unplaced.slice(0, 2).map((s) => fullName(s)).join(', '), to: '/students', action: t('dash.place') }] : []),
     ...(noParent.length ? [{ key: 'parents', title: t('dash.noParent', { n: noParent.length }), to: '/students', action: t('dash.link') }] : []),
     ...(overdue.length
-      ? [{ key: 'fees', title: t('dash.overdue', { n: overdue.length }), detail: formatMoney(overdue.reduce((s, b) => s + Number(b.amount_remaining), 0), locale), to: '/fees', action: t('dash.seeFees') }]
+      ? [
+          {
+            key: 'fees',
+            title: t('dash.overdue', { n: overdue.length }),
+            detail: `${formatMoney(overdue.reduce((s, b) => s + Number(b.amount_remaining), 0), locale)}${notReminded.length ? ` · ${t('dash.notReminded', { n: notReminded.length })}` : ''}`,
+            to: '/fees',
+            action: t('dash.seeFees'),
+          },
+        ]
       : []),
   ]
   const enrolled = studentRows.filter((s) => currentEnrollment(s, ctx.year?.id)).length
@@ -159,6 +212,7 @@ function OfficeDash() {
                   {fullName(a.student)} <span style={{ color: tokens.inkMuted }}>· {a.class?.name}</span>
                 </Typography>
                 <Tag tone={a.status === 'absent' ? 'danger' : a.status === 'late' ? 'warn' : 'info'} label={t(`att.status.${a.status}`)} />
+                {(a.status === 'absent' || a.status === 'late') && <ParentNotified recordId={a.id} notifiedAt={a.parent_notified_at} />}
               </Stack>
             ))}
           </Stack>

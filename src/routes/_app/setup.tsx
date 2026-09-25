@@ -1,12 +1,12 @@
 import { useContext, useEffect, useState } from 'react'
 import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Box, Button, Paper, Stack, Step, StepLabel, Stepper, Tab, Tabs, Typography } from '@mui/material'
+import { Alert, Box, Button, FormControlLabel, Paper, Stack, Step, StepLabel, Stepper, Switch, Tab, Tabs, Typography } from '@mui/material'
 import { OnboardingShell } from '#/components/OnboardingShell'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, Card, Tag } from '#/components/ui'
 import { EmptyState, Loading } from '#/components/states'
-import { SchoolContext } from '#/lib/session'
+import { SchoolContext, staffFeesAccess } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { CreateSchool, StepActions } from '#/features/setup/CreateSchool'
 import { ScheduleEditor, pauseLabel } from '#/features/setup/ScheduleEditor'
@@ -203,6 +203,7 @@ function SchoolInfo() {
         <Info label={t('setup.city')} value={s.city || '—'} />
         <Info label={t('setup.address')} value={s.address || '—'} />
       </Card>
+      {ctx.isAdmin && <StaffPermissions />}
       <Card>
         <Stack direction="row" sx={{ alignItems: 'center', mb: 1.5 }}>
           <Typography variant="h5" sx={{ flex: 1 }}>
@@ -232,6 +233,47 @@ function SchoolInfo() {
         })}
       </Card>
     </Box>
+  )
+}
+
+// What the secrétariat may do: the admin decides (schools.settings; RLS reads
+// the same flag through private.can_manage_fees).
+function StaffPermissions() {
+  const { t } = useI18n()
+  const ctx = useContext(SchoolContext)!
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const on = staffFeesAccess(ctx.school.settings)
+  const save = useMutation({
+    mutationFn: async (value: boolean) =>
+      must(
+        await supabase
+          .from('schools')
+          .update({ settings: { ...ctx.school.settings, staff_fees_access: value } as Json })
+          .eq('id', ctx.school.id),
+      ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['session'] })
+      await router.invalidate()
+    },
+  })
+  return (
+    <Card>
+      <Typography variant="h5" sx={{ mb: 0.5 }}>
+        {t('settings.staffAccess')}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        {t('settings.staffAccessHint')}
+      </Typography>
+      <FormControlLabel
+        control={<Switch checked={on} disabled={save.isPending} onChange={(e) => save.mutate(e.target.checked)} />}
+        label={t('settings.staffFees')}
+      />
+      <Typography variant="body2" color="text.secondary">
+        {on ? t('settings.staffFeesOn') : t('settings.staffFeesOff')}
+      </Typography>
+      {save.isError && <Alert severity="error" sx={{ mt: 1 }}>{errorMessage(save.error, t)}</Alert>}
+    </Card>
   )
 }
 

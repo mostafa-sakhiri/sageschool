@@ -18,6 +18,8 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  Tab,
+  Tabs,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -37,8 +39,19 @@ import { studentsQuery } from '#/features/students/api'
 import type { DaySession } from '#/features/timetable/api'
 import { useSchoolDays } from '#/features/timetable/RealWeek'
 import { subjectTokens, tokens } from '#/theme/theme'
+import { AlertsPanel } from '#/features/attendance/Alerts'
+import { ParentNotified } from '#/features/attendance/ParentNotified'
+import { StaffPresencePanel } from '#/features/attendance/StaffPresence'
+import { alertsQuery } from '#/features/attendance/api'
 
-export const Route = createFileRoute('/_app/attendance')({ component: AttendancePage })
+type Tab = 'students' | 'teachers' | 'alerts'
+
+export const Route = createFileRoute('/_app/attendance')({
+  validateSearch: (s: Record<string, unknown>): { tab?: Tab } => ({
+    tab: s.tab === 'teachers' || s.tab === 'alerts' ? s.tab : undefined,
+  }),
+  component: AttendancePage,
+})
 
 type Status = 'present' | 'absent' | 'late' | 'excused'
 const TONE: Record<Status, Tone> = { present: 'ok', absent: 'danger', late: 'warn', excused: 'info' }
@@ -46,16 +59,45 @@ const TONE: Record<Status, Tone> = { present: 'ok', absent: 'danger', late: 'war
 function AttendancePage() {
   const { t } = useI18n()
   const ctx = useSchool()
+  const { tab = 'students' } = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const alerts = useQuery({ ...alertsQuery(ctx.school.id), enabled: ctx.isOffice })
+  const openAlerts = (alerts.data ?? []).filter((a) => a.status === 'open').length
+  if (!ctx.isOffice)
+    return <AppShell title={t('nav.attendance')}>{ctx.role === 'teacher' ? <RollCall /> : <FamilyAbsences />}</AppShell>
+  // Office: students' roll call, teachers' arrivals and departures, alerts
   return (
     <AppShell title={t('nav.attendance')}>
-      {ctx.isOffice || ctx.role === 'teacher' ? <RollCall /> : <FamilyAbsences />}
+      <PageIntro title={t('att.pageTitle')} subtitle={t('att.pageSubtitle')} />
+      <Tabs
+        value={tab}
+        onChange={(_, v) => navigate({ search: v === 'students' ? {} : { tab: v } })}
+        variant="scrollable"
+        allowScrollButtonsMobile
+        sx={{ mb: 2.5, borderBottom: `1px solid ${tokens.line}` }}
+      >
+        <Tab value="students" label={t('att.tab.students')} />
+        <Tab value="teachers" label={t('att.tab.teachers')} />
+        <Tab
+          value="alerts"
+          label={
+            <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+              <span>{t('att.tab.alerts')}</span>
+              {openAlerts > 0 && <Tag tone="danger" label={openAlerts} />}
+            </Stack>
+          }
+        />
+      </Tabs>
+      {tab === 'students' && <RollCall embedded />}
+      {tab === 'teachers' && <StaffPresencePanel />}
+      {tab === 'alerts' && <AlertsPanel />}
     </AppShell>
   )
 }
 
 // Roll call (spec 06): one class, one date, one session; everyone present by
 // default, the teacher flips the exceptions. Re-saving updates, never duplicates.
-function RollCall() {
+function RollCall({ embedded }: { embedded?: boolean }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
@@ -113,7 +155,7 @@ function RollCall() {
     queryKey: ['school', ctx.school.id, 'attendance', classId, date, slotKey],
     enabled: !!classId,
     queryFn: async () => {
-      let q = supabase.from('attendance_records').select('id, student_id, status, justification').eq('class_id', classId).eq('session_date', date)
+      let q = supabase.from('attendance_records').select('id, student_id, status, justification, parent_notified_at').eq('class_id', classId).eq('session_date', date)
       q = slotId ? q.eq('slot_id', slotId) : q.is('slot_id', null)
       return must(await q)
     },
@@ -159,15 +201,26 @@ function RollCall() {
 
   return (
     <>
-      <PageIntro
-        title={t('att.title')}
-        subtitle={t('att.subtitle')}
-        actions={
+      {embedded ? (
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' }, mb: 2 }}>
+          <Typography color="text.secondary" sx={{ flex: 1 }}>
+            {t('att.subtitle')}
+          </Typography>
           <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending} disabled={!roster.data?.length}>
             {t('att.save')}
           </Button>
-        }
-      />
+        </Stack>
+      ) : (
+        <PageIntro
+          title={t('att.title')}
+          subtitle={t('att.subtitle')}
+          actions={
+            <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending} disabled={!roster.data?.length}>
+              {t('att.save')}
+            </Button>
+          }
+        />
+      )}
       {saved && (
         <Alert severity="success" sx={{ mb: 2 }}>
           {t('att.saved', { date: formatDate(date, locale) })}
@@ -218,7 +271,15 @@ function RollCall() {
                           <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{fullName(s)}</Typography>
                         </Stack>
                       </TableCell>
-                      <TableCell align="right">
+                      <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                        {ctx.isOffice && (() => {
+                          const rec = existing.data?.find((r) => r.student_id === s.id && (r.status === 'absent' || r.status === 'late'))
+                          return rec ? (
+                            <span style={{ marginInlineEnd: 12 }}>
+                              <ParentNotified recordId={rec.id} notifiedAt={rec.parent_notified_at} />
+                            </span>
+                          ) : null
+                        })()}
                         <ToggleButtonGroup
                           exclusive
                           size="small"

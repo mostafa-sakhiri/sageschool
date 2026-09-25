@@ -14,7 +14,7 @@ export type Membership = {
 }
 
 export type SessionData = {
-  user: { id: string; full_name: string; email: string | null; locale: string }
+  user: { id: string; full_name: string; email: string | null; phone: string | null; locale: string }
   memberships: Membership[]
 }
 
@@ -25,7 +25,7 @@ export const sessionQuery = (sub: string) =>
       const user = must(
         await supabase
           .from('users')
-          .select('id, full_name, email, locale')
+          .select('id, full_name, email, phone, locale')
           .eq('auth_provider_id', sub)
           .maybeSingle(),
       )
@@ -146,6 +146,12 @@ export type SchoolCtx = {
   years: SchoolYear[]
   isOffice: boolean
   isAdmin: boolean
+  // Scolarité: always the admin; the secrétariat only if the admin allows it
+  canFees: boolean
+}
+
+export function staffFeesAccess(settings: Record<string, unknown>) {
+  return settings.staff_fees_access === true
 }
 
 export const SchoolContext = createContext<SchoolCtx | null>(null)

@@ -12,12 +12,14 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppAgendaRouteImport } from './routes/_app/agenda'
 import { Route as AppAnnouncementsRouteImport } from './routes/_app/announcements'
 import { Route as AppAttendanceRouteImport } from './routes/_app/attendance'
 import { Route as AppCasesRouteImport } from './routes/_app/cases'
 import { Route as AppClassesRouteImport } from './routes/_app/classes'
 import { Route as AppFeesRouteImport } from './routes/_app/fees'
 import { Route as AppHomeworkRouteImport } from './routes/_app/homework'
+import { Route as AppPreregistrationsRouteImport } from './routes/_app/preregistrations'
 import { Route as AppSetupRouteImport } from './routes/_app/setup'
 import { Route as AppStudentsRouteImport } from './routes/_app/students'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
@@ -35,6 +37,11 @@ const LoginRoute = LoginRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAgendaRoute = AppAgendaRouteImport.update({
+  id: '/agenda',
+  path: '/agenda',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAnnouncementsRoute = AppAnnouncementsRouteImport.update({
@@ -67,6 +74,11 @@ const AppHomeworkRoute = AppHomeworkRouteImport.update({
   path: '/homework',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPreregistrationsRoute = AppPreregistrationsRouteImport.update({
+  id: '/preregistrations',
+  path: '/preregistrations',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSetupRoute = AppSetupRouteImport.update({
   id: '/setup',
   path: '/setup',
@@ -91,12 +103,14 @@ const AppTimetableRoute = AppTimetableRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
+  '/agenda': typeof AppAgendaRoute
   '/announcements': typeof AppAnnouncementsRoute
   '/attendance': typeof AppAttendanceRoute
   '/cases': typeof AppCasesRoute
   '/classes': typeof AppClassesRoute
   '/fees': typeof AppFeesRoute
   '/homework': typeof AppHomeworkRoute
+  '/preregistrations': typeof AppPreregistrationsRoute
   '/setup': typeof AppSetupRoute
   '/students': typeof AppStudentsRoute
   '/team': typeof AppTeamRoute
@@ -104,12 +118,14 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/agenda': typeof AppAgendaRoute
   '/announcements': typeof AppAnnouncementsRoute
   '/attendance': typeof AppAttendanceRoute
   '/cases': typeof AppCasesRoute
   '/classes': typeof AppClassesRoute
   '/fees': typeof AppFeesRoute
   '/homework': typeof AppHomeworkRoute
+  '/preregistrations': typeof AppPreregistrationsRoute
   '/setup': typeof AppSetupRoute
   '/students': typeof AppStudentsRoute
   '/team': typeof AppTeamRoute
@@ -120,12 +136,14 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/_app/agenda': typeof AppAgendaRoute
   '/_app/announcements': typeof AppAnnouncementsRoute
   '/_app/attendance': typeof AppAttendanceRoute
   '/_app/cases': typeof AppCasesRoute
   '/_app/classes': typeof AppClassesRoute
   '/_app/fees': typeof AppFeesRoute
   '/_app/homework': typeof AppHomeworkRoute
+  '/_app/preregistrations': typeof AppPreregistrationsRoute
   '/_app/setup': typeof AppSetupRoute
   '/_app/students': typeof AppStudentsRoute
   '/_app/team': typeof AppTeamRoute
@@ -137,12 +155,14 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/agenda'
     | '/announcements'
     | '/attendance'
     | '/cases'
     | '/classes'
     | '/fees'
     | '/homework'
+    | '/preregistrations'
     | '/setup'
     | '/students'
     | '/team'
@@ -150,12 +170,14 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/agenda'
     | '/announcements'
     | '/attendance'
     | '/cases'
     | '/classes'
     | '/fees'
     | '/homework'
+    | '/preregistrations'
     | '/setup'
     | '/students'
     | '/team'
@@ -165,12 +187,14 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/login'
+    | '/_app/agenda'
     | '/_app/announcements'
     | '/_app/attendance'
     | '/_app/cases'
     | '/_app/classes'
     | '/_app/fees'
     | '/_app/homework'
+    | '/_app/preregistrations'
     | '/_app/setup'
     | '/_app/students'
     | '/_app/team'
@@ -204,6 +228,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/agenda': {
+      id: '/_app/agenda'
+      path: '/agenda'
+      fullPath: '/agenda'
+      preLoaderRoute: typeof AppAgendaRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/announcements': {
@@ -248,6 +279,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppHomeworkRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/preregistrations': {
+      id: '/_app/preregistrations'
+      path: '/preregistrations'
+      fullPath: '/preregistrations'
+      preLoaderRoute: typeof AppPreregistrationsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/setup': {
       id: '/_app/setup'
       path: '/setup'
@@ -280,12 +318,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppAgendaRoute: typeof AppAgendaRoute
   AppAnnouncementsRoute: typeof AppAnnouncementsRoute
   AppAttendanceRoute: typeof AppAttendanceRoute
   AppCasesRoute: typeof AppCasesRoute
   AppClassesRoute: typeof AppClassesRoute
   AppFeesRoute: typeof AppFeesRoute
   AppHomeworkRoute: typeof AppHomeworkRoute
+  AppPreregistrationsRoute: typeof AppPreregistrationsRoute
   AppSetupRoute: typeof AppSetupRoute
   AppStudentsRoute: typeof AppStudentsRoute
   AppTeamRoute: typeof AppTeamRoute
@@ -294,12 +334,14 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAgendaRoute: AppAgendaRoute,
   AppAnnouncementsRoute: AppAnnouncementsRoute,
   AppAttendanceRoute: AppAttendanceRoute,
   AppCasesRoute: AppCasesRoute,
   AppClassesRoute: AppClassesRoute,
   AppFeesRoute: AppFeesRoute,
   AppHomeworkRoute: AppHomeworkRoute,
+  AppPreregistrationsRoute: AppPreregistrationsRoute,
   AppSetupRoute: AppSetupRoute,
   AppStudentsRoute: AppStudentsRoute,
   AppTeamRoute: AppTeamRoute,

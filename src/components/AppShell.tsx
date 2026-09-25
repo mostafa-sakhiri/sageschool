@@ -31,6 +31,8 @@ import CampaignOutlined from '@mui/icons-material/CampaignOutlined'
 import PaymentsOutlined from '@mui/icons-material/PaymentsOutlined'
 import ForumOutlined from '@mui/icons-material/ForumOutlined'
 import MenuBookOutlined from '@mui/icons-material/MenuBookOutlined'
+import EventNoteOutlined from '@mui/icons-material/EventNoteOutlined'
+import HowToRegOutlined from '@mui/icons-material/HowToRegOutlined'
 import MenuIcon from '@mui/icons-material/Menu'
 import LogoutOutlined from '@mui/icons-material/LogoutOutlined'
 import SwapHorizOutlined from '@mui/icons-material/SwapHorizOutlined'
@@ -38,13 +40,16 @@ import CheckOutlined from '@mui/icons-material/CheckOutlined'
 import LightModeOutlined from '@mui/icons-material/LightModeOutlined'
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined'
 import { useI18n } from '#/i18n/i18n'
-import { rememberRole, rememberSchool, useSchool, type Role } from '#/lib/session'
+import { rememberRole, rememberSchool, useSchool, type Role, type SchoolCtx } from '#/lib/session'
 import { supabase } from '#/lib/supabase/client'
 import { tokens } from '#/theme/theme'
 import { ContextSwitcher } from './ContextSwitcher'
+import { ContactDialog } from '#/features/team/ContactDialog'
+import { formatPhone } from '#/lib/format'
+import ContactPhoneOutlined from '@mui/icons-material/ContactPhoneOutlined'
 import { QuickActions } from './QuickActions'
 
-type NavItem = { to: string; key: string; icon: React.ReactNode; roles: Role[] }
+type NavItem = { to: string; key: string; icon: React.ReactNode; roles: Role[]; when?: (ctx: SchoolCtx) => boolean }
 
 const NAV: NavItem[] = [
   { to: '/', key: 'nav.dashboard', icon: <DashboardOutlined />, roles: ['admin', 'staff', 'teacher', 'parent', 'student'] },
@@ -52,11 +57,13 @@ const NAV: NavItem[] = [
   { to: '/team', key: 'nav.team', icon: <GroupsOutlined />, roles: ['admin'] },
   { to: '/classes', key: 'nav.classes', icon: <ClassOutlined />, roles: ['admin', 'staff'] },
   { to: '/students', key: 'nav.students', icon: <FaceOutlined />, roles: ['admin', 'staff'] },
+  { to: '/preregistrations', key: 'nav.preregistrations', icon: <HowToRegOutlined />, roles: ['admin', 'staff'] },
+  { to: '/agenda', key: 'nav.agenda', icon: <EventNoteOutlined />, roles: ['admin', 'staff'] },
   { to: '/timetable', key: 'nav.timetable', icon: <CalendarMonthOutlined />, roles: ['admin', 'staff', 'teacher', 'parent', 'student'] },
   { to: '/attendance', key: 'nav.attendance', icon: <FactCheckOutlined />, roles: ['admin', 'staff', 'teacher', 'parent', 'student'] },
   { to: '/homework', key: 'nav.homework', icon: <MenuBookOutlined />, roles: ['teacher', 'parent', 'student'] },
   { to: '/announcements', key: 'nav.announcements', icon: <CampaignOutlined />, roles: ['admin', 'staff', 'teacher', 'parent'] },
-  { to: '/fees', key: 'nav.fees', icon: <PaymentsOutlined />, roles: ['admin', 'staff', 'parent'] },
+  { to: '/fees', key: 'nav.fees', icon: <PaymentsOutlined />, roles: ['admin', 'staff', 'parent'], when: (c) => c.role === 'parent' || c.canFees },
   { to: '/cases', key: 'nav.cases', icon: <ForumOutlined />, roles: ['admin', 'staff', 'parent'] },
 ]
 
@@ -170,7 +177,7 @@ function Sidebar({ onNavigate }: { onNavigate: () => void }) {
   const { t } = useI18n()
   const ctx = useSchool()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const items = NAV.filter((n) => n.roles.includes(ctx.role))
+  const items = NAV.filter((n) => n.roles.includes(ctx.role) && (!n.when || n.when(ctx)))
 
   return (
     <Box
@@ -241,6 +248,7 @@ function UserCard() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const [contactOpen, setContactOpen] = useState(false)
   const initials = ctx.user.full_name
     .split(/\s+/)
     .map((w) => w[0])
@@ -300,6 +308,17 @@ function UserCard() {
               <ListItemText>{t('shell.actAs', { role: t(`role.${r}`) })}</ListItemText>
             </MenuItem>
           ))}
+        <MenuItem
+          onClick={() => {
+            setAnchor(null)
+            setContactOpen(true)
+          }}
+        >
+          <ListItemIcon>
+            <ContactPhoneOutlined fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary={t('contact.mine')} secondary={formatPhone(ctx.user.phone) || t('contact.noPhone')} />
+        </MenuItem>
         <MenuItem onClick={signOut}>
           <ListItemIcon>
             <LogoutOutlined fontSize="small" />
@@ -307,6 +326,13 @@ function UserCard() {
           <ListItemText>{t('shell.signOut')}</ListItemText>
         </MenuItem>
       </Menu>
+      {contactOpen && (
+        <ContactDialog
+          target={{ memberId: ctx.member.id, fullName: ctx.user.full_name, phone: ctx.user.phone, email: ctx.user.email }}
+          schoolId={ctx.school.id}
+          onClose={() => setContactOpen(false)}
+        />
+      )}
     </>
   )
 }

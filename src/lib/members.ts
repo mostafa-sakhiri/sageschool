@@ -6,6 +6,7 @@ type InviteInput = {
   schoolId: string
   email: string
   fullName: string
+  phone?: string
   role: Role
   password?: string
   // role 'student': link the new login to this student record
@@ -30,7 +31,9 @@ export const inviteMember = createServerFn({ method: 'POST' })
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('E-mail invalide')
     if (!String(d.fullName ?? '').trim()) throw new Error('Nom obligatoire')
     if (!['admin', 'staff', 'teacher', 'parent', 'student'].includes(d.role)) throw new Error('Rôle invalide')
-    return { ...d, email, fullName: d.fullName.trim() }
+    const phone = String(d.phone ?? '').replace(/[^\d+]/g, '')
+    if (phone && !/^\+?\d{6,15}$/.test(phone)) throw new Error('Téléphone invalide')
+    return { ...d, email, phone: phone || undefined, fullName: d.fullName.trim() }
   })
   .handler(async ({ data }) => {
     const supabase = createClient()
@@ -77,6 +80,10 @@ export const inviteMember = createServerFn({ method: 'POST' })
       userId = created?.id
     }
     if (!userId) throw new Error('Utilisateur introuvable')
+    if (data.phone) {
+      const { error } = await admin.from('users').update({ phone: data.phone }).eq('id', userId)
+      if (error) throw new Error(error.code === '23505' ? 'Ce numéro de téléphone est déjà utilisé' : error.message)
+    }
 
     // Idempotent: the same person may already hold this role here.
     const { data: member, error: memberError } = await admin

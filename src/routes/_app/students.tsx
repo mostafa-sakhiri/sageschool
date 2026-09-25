@@ -16,6 +16,9 @@ import {
   MenuItem,
   Paper,
   Stack,
+  Switch,
+  Tab,
+  Tabs,
   Table,
   TableBody,
   TableCell,
@@ -27,6 +30,7 @@ import {
 import PersonAddOutlined from '@mui/icons-material/PersonAddOutlined'
 import SearchOutlined from '@mui/icons-material/SearchOutlined'
 import CloseOutlined from '@mui/icons-material/CloseOutlined'
+import EditOutlined from '@mui/icons-material/EditOutlined'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, Tag, fullName, initials } from '#/components/ui'
 import { EmptyState, QueryState } from '#/components/states'
@@ -37,6 +41,8 @@ import { errorMessage, must } from '#/lib/errors'
 import { classesQuery } from '#/features/classes/api'
 import { currentEnrollment, parentsQuery, studentsQuery, type StudentRow } from '#/features/students/api'
 import { InviteDialog } from '#/features/team/InviteDialog'
+import { ContactDialog, type ContactTarget } from '#/features/team/ContactDialog'
+import { formatPhone } from '#/lib/format'
 import { AddStudentDialog } from '#/features/students/AddStudentDialog'
 import { ImportDialog } from '#/features/import/ImportZone'
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
@@ -44,7 +50,10 @@ import { subjectTokens, tokens } from '#/theme/theme'
 
 export const Route = createFileRoute('/_app/students')({
   // ?import=1 opens the Excel import (quick actions)
-  validateSearch: (s: Record<string, unknown>): { import?: boolean } => ({ import: s.import === true || s.import === 1 || s.import === '1' || undefined }),
+  validateSearch: (s: Record<string, unknown>): { import?: boolean; tab?: 'parents' } => ({
+    import: s.import === true || s.import === 1 || s.import === '1' || undefined,
+    tab: s.tab === 'parents' ? 'parents' : undefined,
+  }),
   loader: ({ context }) => context.schoolId && context.queryClient.prefetchQuery(studentsQuery(context.schoolId)),
   component: StudentsPage,
 })
@@ -56,7 +65,7 @@ function StudentsPage() {
   const [search, setSearch] = useState('')
   const [adding, setAdding] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
-  const { import: openImport } = Route.useSearch()
+  const { import: openImport, tab } = Route.useSearch()
   const navigateSelf = Route.useNavigate()
   const [importing, setImporting] = useState(false)
   useEffect(() => {
@@ -89,6 +98,18 @@ function StudentsPage() {
           </>
         }
       />
+      <Tabs
+        value={tab ?? 'students'}
+        onChange={(_, v) => navigateSelf({ search: v === 'parents' ? { tab: 'parents' } : {} })}
+        sx={{ mb: 2, borderBottom: `1px solid ${tokens.line}` }}
+      >
+        <Tab value="students" label={t('students.tab.students')} />
+        <Tab value="parents" label={t('students.tab.parents')} />
+      </Tabs>
+      {tab === 'parents' ? (
+        <ParentsTab onOpenStudent={setOpenId} />
+      ) : (
+      <>
       {unplaced > 0 && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           {t('students.unplaced', { n: unplaced })}
@@ -163,7 +184,19 @@ function StudentsPage() {
                       <TableCell>{e?.class?.name ?? <Tag tone="warn" label={t('students.noClass')} />}</TableCell>
                       <TableCell>
                         {s.guardians.length ? (
-                          s.guardians.map((g) => g.member?.user?.full_name).join(', ')
+                          <Stack spacing={0.25}>
+                            {s.guardians.map((g) => (
+                              <Typography key={g.guardian_member_id} sx={{ fontSize: 13.5 }}>
+                                {g.member?.user?.full_name}
+                                {g.member?.user?.phone && (
+                                  <Box component="span" dir="ltr" sx={{ color: tokens.inkMuted }}>
+                                    {' · '}
+                                    {formatPhone(g.member.user.phone)}
+                                  </Box>
+                                )}
+                              </Typography>
+                            ))}
+                          </Stack>
                         ) : (
                           <Tag tone="warn" label={t('students.noParent')} />
                         )}
@@ -177,6 +210,8 @@ function StudentsPage() {
           </Paper>
         )}
       </QueryState>
+      </>
+      )}
       <ImportDialog open={importing} onClose={() => setImporting(false)} kinds={['students']} title={t('import.studentsTitle')} />
       <AddStudentDialog open={adding} onClose={() => setAdding(false)} onCreated={(id) => setOpenId(id)} />
       <Drawer
@@ -200,6 +235,7 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
   const [inviteParent, setInviteParent] = useState(false)
   const [inviteStudent, setInviteStudent] = useState(false)
   const [linkId, setLinkId] = useState<string | null>(null)
+  const [contact, setContact] = useState<ContactTarget | null>(null)
   const [relationship, setRelationship] = useState<'mother' | 'father' | 'guardian' | 'other'>('mother')
   const [isPayer, setIsPayer] = useState(true)
   const enrollment = currentEnrollment(student, ctx.year?.id)
@@ -322,7 +358,7 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
               options={linkable}
               value={linkable.find((p) => p.id === linkId) ?? null}
               onChange={(_, v) => setLinkId(v?.id ?? null)}
-              getOptionLabel={(p) => `${p.user?.full_name ?? ''}${p.user?.email ? ` · ${p.user.email}` : ''}`}
+              getOptionLabel={(p) => [p.user?.full_name, formatPhone(p.user?.phone), p.user?.email].filter(Boolean).join(' · ')}
               renderInput={(params) => <TextField {...params} label={t('students.existingParent')} />}
               sx={{ flex: 1 }}
             />
@@ -341,12 +377,21 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
           </Avatar>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{g.member?.user?.full_name}</Typography>
-            <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted, textAlign: "start" }} dir="ltr">
-              {g.member?.user?.email}
+            <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted, textAlign: 'start' }} dir="ltr">
+              {[formatPhone(g.member?.user?.phone), g.member?.user?.email].filter(Boolean).join(' · ') || '—'}
             </Typography>
           </Box>
           {g.relationship && <Tag label={t(`students.rel.${g.relationship}`)} />}
           {g.is_payer && <Tag tone="info" label={t('students.payer')} />}
+          {g.member?.user && (
+            <IconButton
+              size="small"
+              aria-label={`${t('contact.title')} — ${g.member.user.full_name}`}
+              onClick={() => setContact({ memberId: g.guardian_member_id, fullName: g.member!.user!.full_name, phone: g.member!.user!.phone, email: g.member!.user!.email })}
+            >
+              <EditOutlined sx={{ fontSize: 16 }} />
+            </IconButton>
+          )}
           <Button size="small" color="error" onClick={() => unlink.mutate(g.guardian_member_id)}>
             {t('students.unlink')}
           </Button>
@@ -384,6 +429,7 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
         </Typography>
       )}
 
+      {contact && <ContactDialog target={contact} schoolId={ctx.school.id} onClose={() => setContact(null)} />}
       <InviteDialog
         open={inviteParent}
         onClose={() => setInviteParent(false)}
@@ -402,5 +448,117 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
         title={t('students.enableAccess')}
       />
     </Stack>
+  )
+}
+
+// Parents live with the students (not in the team page): who they are, how to
+// reach them, their children, whether their account is active.
+function ParentsTab({ onOpenStudent }: { onOpenStudent: (id: string) => void }) {
+  const { t } = useI18n()
+  const ctx = useSchool()
+  const queryClient = useQueryClient()
+  const parents = useQuery(parentsQuery(ctx.school.id))
+  const students = useQuery(studentsQuery(ctx.school.id))
+  const [search, setSearch] = useState('')
+  const [contact, setContact] = useState<ContactTarget | null>(null)
+  const toggle = useMutation({
+    mutationFn: async (p: { id: string; status: string }) =>
+      must(await supabase.from('school_members').update({ status: p.status === 'active' ? 'inactive' : 'active' }).eq('id', p.id)),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id] }),
+  })
+  const childrenOf = (memberId: string) =>
+    (students.data ?? []).filter((s) => s.guardians.some((g) => g.guardian_member_id === memberId))
+  const q = search.trim().toLowerCase()
+  const rows = (parents.data ?? []).filter(
+    (p) =>
+      !q ||
+      [p.user?.full_name, p.user?.email, p.user?.phone, ...childrenOf(p.id).map((c) => fullName(c))]
+        .filter(Boolean)
+        .some((v) => v!.toLowerCase().includes(q)),
+  )
+  return (
+    <>
+      <TextField
+        placeholder={t('students.searchParent')}
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        sx={{ mb: 2, width: { xs: '100%', sm: 360 } }}
+        slotProps={{
+          input: { startAdornment: <InputAdornment position="start"><SearchOutlined fontSize="small" /></InputAdornment> },
+          htmlInput: { 'aria-label': t('students.searchParent') },
+        }}
+      />
+      {toggle.isError && <Alert severity="error" sx={{ mb: 2 }}>{errorMessage(toggle.error, t)}</Alert>}
+      <QueryState query={parents} rows={5} empty={(d) => (d.length === 0 ? <EmptyState title={t('students.noParents')} hint={t('students.noParentsHint')} /> : null)}>
+        {() => (
+          <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>{t('common.name')}</TableCell>
+                  <TableCell>{t('common.phone')}</TableCell>
+                  <TableCell>{t('auth.email')}</TableCell>
+                  <TableCell>{t('students.children')}</TableCell>
+                  {ctx.isAdmin && <TableCell>{t('team.active')}</TableCell>}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((p) => {
+                  const kids = childrenOf(p.id)
+                  return (
+                    <TableRow key={p.id} sx={{ opacity: p.status === 'active' ? 1 : 0.55 }}>
+                      <TableCell>
+                        <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
+                          <Avatar sx={{ width: 28, height: 28, fontSize: 11, bgcolor: subjectTokens(1).bg, color: subjectTokens(1).ink }}>
+                            {initials(p.user?.full_name ?? '?')}
+                          </Avatar>
+                          <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{p.user?.full_name}</Typography>
+                        </Stack>
+                      </TableCell>
+                      <TableCell dir="ltr" sx={{ textAlign: 'start', whiteSpace: 'nowrap' }}>
+                        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                          <span>{formatPhone(p.user?.phone) || '—'}</span>
+                          {p.user && (
+                            <IconButton
+                              size="small"
+                              aria-label={`${t('contact.title')} — ${p.user.full_name}`}
+                              onClick={() => setContact({ memberId: p.id, fullName: p.user!.full_name, phone: p.user!.phone, email: p.user!.email })}
+                            >
+                              <EditOutlined sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          )}
+                        </Stack>
+                      </TableCell>
+                      <TableCell dir="ltr" sx={{ textAlign: 'start' }}>{p.user?.email ?? '—'}</TableCell>
+                      <TableCell>
+                        {kids.length ? (
+                          <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                            {kids.map((k) => (
+                              <Tag key={k.id} tone="info" label={fullName(k)} onClick={() => onOpenStudent(k.id)} />
+                            ))}
+                          </Stack>
+                        ) : (
+                          <Tag tone="warn" label={t('students.noChildLinked')} />
+                        )}
+                      </TableCell>
+                      {ctx.isAdmin && (
+                        <TableCell>
+                          <Switch
+                            checked={p.status === 'active'}
+                            onChange={() => toggle.mutate(p)}
+                            slotProps={{ input: { 'aria-label': `${t('team.active')} — ${p.user?.full_name}` } }}
+                          />
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </Paper>
+        )}
+      </QueryState>
+      {contact && <ContactDialog target={contact} schoolId={ctx.school.id} onClose={() => setContact(null)} />}
+    </>
   )
 }

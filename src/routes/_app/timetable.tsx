@@ -16,11 +16,13 @@ import { RealWeek, WeekNav, useSchoolDays } from '#/features/timetable/RealWeek'
 import { WeekGrid, type Block } from '#/features/timetable/WeekGrid'
 import { subjectColor, teacherWeekQuery } from '#/features/timetable/api'
 import { tokens } from '#/theme/theme'
+import { membersQuery } from '#/features/team/api'
 
 export const Route = createFileRoute('/_app/timetable')({
-  validateSearch: (s: Record<string, unknown>): { classId?: string; mode?: 'week' | 'edit' } => ({
+  validateSearch: (s: Record<string, unknown>): { classId?: string; mode?: 'week' | 'edit' | 'teacher'; teacherId?: string } => ({
     classId: typeof s.classId === 'string' ? s.classId : undefined,
-    mode: s.mode === 'edit' ? 'edit' : s.mode === 'week' ? 'week' : undefined,
+    mode: s.mode === 'edit' || s.mode === 'week' || s.mode === 'teacher' ? s.mode : undefined,
+    teacherId: typeof s.teacherId === 'string' ? s.teacherId : undefined,
   }),
   component: TimetablePage,
 })
@@ -30,7 +32,7 @@ function TimetablePage() {
   const ctx = useSchool()
   return (
     <AppShell title={t('nav.timetable')}>
-      {ctx.isOffice ? <OfficeView /> : ctx.role === 'teacher' ? <TeacherView /> : <FamilyView />}
+      {ctx.isOffice ? <OfficeView /> : ctx.role === 'teacher' ? <TeacherView memberId={ctx.member.id} /> : <FamilyView />}
     </AppShell>
   )
 }
@@ -48,6 +50,15 @@ function OfficeView() {
   if (classes.isPending) return <Loading rows={5} />
   if (classes.isError) return <ErrorState error={classes.error} onRetry={() => classes.refetch()} />
   if (!classes.data?.length) return <EmptyState title={t('tt.noClasses')} hint={t('tt.noClassesHint')} />
+
+  const tabs = (
+    <Tabs value={mode} onChange={(_, v) => navigate({ search: (s) => ({ ...s, mode: v }) })} sx={{ mb: 2, borderBottom: `1px solid ${tokens.line}` }}>
+      <Tab value="week" label={t('tt.tab.week')} />
+      {ctx.isAdmin && <Tab value="edit" label={t('tt.tab.edit')} />}
+      <Tab value="teacher" label={t('tt.tab.teacher')} />
+    </Tabs>
+  )
+  if (mode === 'teacher') return <OfficeTeacherView tabs={tabs} />
 
   return (
     <>
@@ -70,14 +81,7 @@ function OfficeView() {
           </TextField>
         }
       />
-      <Tabs
-        value={mode}
-        onChange={(_, v) => navigate({ search: (s) => ({ ...s, mode: v }) })}
-        sx={{ mb: 2, borderBottom: `1px solid ${tokens.line}` }}
-      >
-        <Tab value="week" label={t('tt.tab.week')} />
-        {ctx.isAdmin && <Tab value="edit" label={t('tt.tab.edit')} />}
-      </Tabs>
+      {tabs}
       {classId && (mode === 'edit' && ctx.isAdmin ? <Builder classId={classId} /> : <RealWeek key={classId} classId={classId} allowExceptions />)}
     </>
   )
@@ -118,13 +122,58 @@ function FamilyView() {
   )
 }
 
+// Office: any teacher's week (who teaches when, across classes)
+function OfficeTeacherView({ tabs }: { tabs: React.ReactNode }) {
+  const { t } = useI18n()
+  const ctx = useSchool()
+  const search = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const members = useQuery(membersQuery(ctx.school.id))
+  const teachers = (members.data ?? [])
+    .filter((m) => m.role === 'teacher' && m.status === 'active')
+    .sort((a, b) => (a.user?.full_name ?? '').localeCompare(b.user?.full_name ?? ''))
+  const teacherId = search.teacherId ?? teachers[0]?.id
+  const teacher = teachers.find((m) => m.id === teacherId)
+  return (
+    <>
+      <PageIntro
+        title={t('tt.title')}
+        subtitle={t('tt.teacherWeekHint')}
+        actions={
+          <TextField
+            select
+            label={t('tt.chooseTeacher')}
+            value={teacherId ?? ''}
+            onChange={(e) => navigate({ search: (s) => ({ ...s, teacherId: e.target.value }) })}
+            sx={{ minWidth: 240 }}
+          >
+            {teachers.map((m) => (
+              <MenuItem key={m.id} value={m.id}>
+                {m.user?.full_name}
+              </MenuItem>
+            ))}
+          </TextField>
+        }
+      />
+      {tabs}
+      {members.isPending ? (
+        <Loading rows={4} />
+      ) : teacher ? (
+        <TeacherView key={teacher.id} memberId={teacher.id} embedded />
+      ) : (
+        <EmptyState title={t('presence.noTeachers')} />
+      )}
+    </>
+  )
+}
+
 // Teacher: every session across their classes, substitutions included.
-function TeacherView() {
+function TeacherView({ memberId, embedded }: { memberId: string; embedded?: boolean }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
   const { days, start, end } = useSchoolDays()
   const [monday, setMonday] = useState(mondayOf(ctx.year && todayIso() < ctx.year.starts_on ? ctx.year.starts_on : todayIso()))
-  const week = useQuery(teacherWeekQuery(ctx.school.id, ctx.member.id, monday, days))
+  const week = useQuery(teacherWeekQuery(ctx.school.id, memberId, monday, days))
   const subjects = useQuery(subjectsQuery(ctx.school.id))
   const classes = useQuery({ ...classesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year })
   const dayNames = t('setup.dayNames').split(',')
@@ -145,7 +194,7 @@ function TeacherView() {
   )
   return (
     <>
-      <PageIntro title={t('tt.myWeek')} subtitle={t('tt.myWeekHint')} />
+      {!embedded && <PageIntro title={t('tt.myWeek')} subtitle={t('tt.myWeekHint')} />}
       <Stack spacing={2}>
         <WeekNav monday={monday} onChange={setMonday} />
         {week.isPending ? (
@@ -155,9 +204,11 @@ function TeacherView() {
         ) : (
           <WeekGrid days={days} dayLabels={labels} blocks={blocks} dayStart={start} dayEnd={end} emptyText={t('tt.noSessions')} />
         )}
-        <Typography variant="body2" color="text.secondary">
-          {t('tt.teacherNote')}
-        </Typography>
+        {!embedded && (
+          <Typography variant="body2" color="text.secondary">
+            {t('tt.teacherNote')}
+          </Typography>
+        )}
       </Stack>
     </>
   )

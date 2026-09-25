@@ -35,6 +35,8 @@ export type CaseRow = {
   subject: string
   status: 'open' | 'answered' | 'resolved'
   direction: 'parent_to_school' | 'school_to_parent'
+  channel: 'app' | 'phone' | 'in_person' | 'other'
+  for_admin: boolean
   student_id: string | null
   parent_member_id: string
   updated_at: string
@@ -52,7 +54,7 @@ export const casesQuery = (schoolId: string) =>
         await supabase
           .from('cases')
           .select(
-            'id, subject, status, direction, student_id, parent_member_id, updated_at, parent:school_members!cases_parent_member_id_school_id_parent_role_fkey(user:users(full_name)), student:students(first_name, last_name)',
+            'id, subject, status, direction, channel, for_admin, student_id, parent_member_id, updated_at, parent:school_members!cases_parent_member_id_school_id_parent_role_fkey(user:users(full_name)), student:students(first_name, last_name)',
           )
           .eq('school_id', schoolId)
           .order('updated_at', { ascending: false }),

@@ -3,8 +3,11 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
+  Checkbox,
+  FormControlLabel,
   Dialog,
   DialogActions,
   DialogContent,
@@ -29,7 +32,8 @@ import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
 import { errorMessage, must } from '#/lib/errors'
 import { formatDateTime } from '#/lib/format'
-import { studentsQuery } from '#/features/students/api'
+import { parentsQuery, studentsQuery } from '#/features/students/api'
+import { formatPhone } from '#/lib/format'
 import { tokens } from '#/theme/theme'
 import { CASE_TONE, casesQuery, type CaseRow } from '#/features/queries'
 
@@ -46,7 +50,7 @@ function CasesPage() {
   const ctx = useSchool()
   const cases = useQuery(casesQuery(ctx.school.id))
   const [selected, setSelected] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'active' | 'resolved'>('active')
+  const [filter, setFilter] = useState<'active' | 'admin' | 'resolved'>('active')
   const [composing, setComposing] = useState(false)
   const { new: openNew } = Route.useSearch()
   const navigateSelf = Route.useNavigate()
@@ -56,7 +60,9 @@ function CasesPage() {
     navigateSelf({ search: {}, replace: true })
   }, [openNew, navigateSelf])
 
-  const rows = (cases.data ?? []).filter((c) => (filter === 'resolved' ? c.status === 'resolved' : c.status !== 'resolved'))
+  const rows = (cases.data ?? []).filter((c) =>
+    filter === 'resolved' ? c.status === 'resolved' : filter === 'admin' ? c.for_admin && c.status !== 'resolved' : c.status !== 'resolved',
+  )
   const current = (cases.data ?? []).find((c) => c.id === selected) ?? rows[0]
 
   return (
@@ -65,15 +71,20 @@ function CasesPage() {
         title={ctx.isOffice ? t('cases.titleOffice') : t('cases.titleParent')}
         subtitle={ctx.isOffice ? t('cases.subtitleOffice') : t('cases.subtitleParent')}
         actions={
-          ctx.role === 'parent' && (
+          (ctx.role === 'parent' || ctx.isOffice) && (
             <Button variant="contained" startIcon={<EditOutlined />} onClick={() => setComposing(true)}>
-              {t('cases.new')}
+              {ctx.isOffice ? t('cases.newComplaint') : t('cases.new')}
             </Button>
           )
         }
       />
       <ToggleButtonGroup exclusive size="small" value={filter} onChange={(_, v) => v && setFilter(v)} sx={{ mb: 2 }}>
         <ToggleButton value="active">{t('cases.active')}</ToggleButton>
+        {ctx.isOffice && (
+          <ToggleButton value="admin">
+            {t('cases.forAdmin')} ({(cases.data ?? []).filter((c) => c.for_admin && c.status !== 'resolved').length})
+          </ToggleButton>
+        )}
         <ToggleButton value="resolved">{t('cases.resolvedTab')}</ToggleButton>
       </ToggleButtonGroup>
       <QueryState
@@ -95,7 +106,10 @@ function CasesPage() {
                       secondary={`${ctx.isOffice ? `${c.parent?.user?.full_name ?? ''} · ` : ''}${formatDateTime(c.updated_at, locale)}`}
                       slotProps={{ primary: { sx: { fontWeight: 600, fontSize: 14 } } }}
                     />
-                    <Tag tone={CASE_TONE[c.status]} label={t(`cases.status.${c.status}`)} sx={{ mt: 0.5 }} />
+                    <Stack spacing={0.5} sx={{ alignItems: 'flex-end', mt: 0.5 }}>
+                      <Tag tone={CASE_TONE[c.status]} label={t(`cases.status.${c.status}`)} />
+                      {ctx.isOffice && c.for_admin && <Tag tone="info" label={t('cases.forAdminShort')} />}
+                    </Stack>
                   </ListItemButton>
                 ))}
               </List>
@@ -104,7 +118,12 @@ function CasesPage() {
           </Box>
         )}
       </QueryState>
-      {composing && <NewCase onClose={() => setComposing(false)} onCreated={setSelected} />}
+      {composing &&
+        (ctx.isOffice ? (
+          <NewComplaint onClose={() => setComposing(false)} onCreated={setSelected} />
+        ) : (
+          <NewCase onClose={() => setComposing(false)} onCreated={setSelected} />
+        ))}
     </AppShell>
   )
 }
@@ -178,17 +197,21 @@ function Thread({ c }: { c: CaseRow }) {
       <Typography sx={{ fontSize: 13, color: tokens.inkMuted, mb: 2 }}>
         {c.parent?.user?.full_name}
         {c.student ? ` · ${fullName(c.student)}` : ''}
+        {c.channel !== 'app' ? ` · ${t(`cases.channel.${c.channel}`)}` : ''}
+        {ctx.isOffice && c.for_admin ? ` · ${t('cases.forAdmin')}` : ''}
       </Typography>
       <Stack spacing={1.25} sx={{ flex: 1, mb: 2 }}>
         {messages.isPending && <Loading rows={2} />}
-        {(messages.data ?? []).map((m) => {
-          const fromSchool = m.author?.role === 'admin' || m.author?.role === 'staff'
+        {(messages.data ?? []).map((m, i) => {
+          // A complaint entered by the office: its first message is the parent's words
+          const onBehalf = i === 0 && c.direction === 'parent_to_school' && c.channel !== 'app'
+          const fromSchool = !onBehalf && (m.author?.role === 'admin' || m.author?.role === 'staff')
           const mine = m.author_member_id === ctx.member.id
           return (
             <Box
               key={m.id}
               sx={{
-                alignSelf: mine ? 'flex-end' : 'flex-start',
+                alignSelf: mine && !onBehalf ? 'flex-end' : 'flex-start',
                 maxWidth: '85%',
                 p: 1.5,
                 borderRadius: 3,
@@ -197,7 +220,10 @@ function Thread({ c }: { c: CaseRow }) {
               }}
             >
               <Typography sx={{ fontSize: 12, fontWeight: 600, color: tokens.inkMuted, mb: 0.5 }}>
-                {m.author?.user?.full_name} · {fromSchool ? t('cases.school') : t('role.parent')} · {formatDateTime(m.created_at, locale)}
+                {onBehalf
+                  ? `${c.parent?.user?.full_name ?? t('role.parent')} · ${t('cases.recordedBy', { name: m.author?.user?.full_name ?? '' })}`
+                  : `${m.author?.user?.full_name} · ${fromSchool ? t('cases.school') : t('role.parent')}`}{' '}
+                · {formatDateTime(m.created_at, locale)}
               </Typography>
               <Typography dir="auto" sx={{ whiteSpace: 'pre-wrap', fontSize: 14.5 }}>{m.body}</Typography>
             </Box>
@@ -297,6 +323,102 @@ function NewCase({ onClose, onCreated }: { onClose: () => void; onCreated: (id: 
         <Button onClick={onClose}>{t('common.cancel')}</Button>
         <Button variant="contained" onClick={() => create.mutate()} loading={create.isPending} disabled={!subject.trim() || !body.trim()}>
           {t('cases.send')}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+// The secrétariat writes down a complaint received by phone or at the desk,
+// in the parent's name, for the administration (for_admin). The first message
+// is the parent's words: the case stays open, nothing is sent to the parent.
+function NewComplaint({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+  const { t } = useI18n()
+  const ctx = useSchool()
+  const queryClient = useQueryClient()
+  const parents = useQuery(parentsQuery(ctx.school.id))
+  const students = useQuery(studentsQuery(ctx.school.id))
+  const [parentId, setParentId] = useState<string | null>(null)
+  const [studentId, setStudentId] = useState('')
+  const [channel, setChannel] = useState<'phone' | 'in_person' | 'other'>('phone')
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
+  const [forAdmin, setForAdmin] = useState(true)
+  const kids = (students.data ?? []).filter((s) => s.guardians.some((g) => g.guardian_member_id === parentId))
+  useEffect(() => {
+    setStudentId(kids.length === 1 ? kids[0].id : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when the parent changes
+  }, [parentId])
+  const create = useMutation({
+    mutationFn: async () => {
+      const c = must(
+        await supabase
+          .from('cases')
+          .insert({
+            school_id: ctx.school.id,
+            direction: 'parent_to_school',
+            channel,
+            for_admin: forAdmin,
+            subject: subject.trim(),
+            student_id: studentId || null,
+            parent_member_id: parentId!,
+            opened_by_member_id: ctx.member.id,
+          })
+          .select('id')
+          .single(),
+      )
+      must(await supabase.from('case_messages').insert({ school_id: ctx.school.id, case_id: c.id, author_member_id: ctx.member.id, body: body.trim() }))
+      return c.id
+    },
+    onSuccess: async (id) => {
+      await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'cases'] })
+      onCreated(id)
+      onClose()
+    },
+  })
+  const options = parents.data ?? []
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>{t('cases.newComplaint')}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            {t('cases.complaintHint')}
+          </Typography>
+          <Autocomplete
+            options={options}
+            value={options.find((p) => p.id === parentId) ?? null}
+            onChange={(_, v) => setParentId(v?.id ?? null)}
+            getOptionLabel={(p) => [p.user?.full_name, formatPhone(p.user?.phone)].filter(Boolean).join(' · ')}
+            renderInput={(params) => <TextField {...params} label={t('cases.parent')} required autoFocus />}
+          />
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <TextField select label={t('cases.aboutChild')} value={studentId} onChange={(e) => setStudentId(e.target.value)} fullWidth disabled={!parentId}>
+              <MenuItem value="">{t('cases.noChild')}</MenuItem>
+              {kids.map((k) => (
+                <MenuItem key={k.id} value={k.id}>
+                  {fullName(k)}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField select label={t('cases.receivedBy')} value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)} sx={{ minWidth: 180 }}>
+              {(['phone', 'in_person', 'other'] as const).map((c) => (
+                <MenuItem key={c} value={c}>
+                  {t(`cases.channel.${c}`)}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+          <TextField label={t('cases.subject')} value={subject} onChange={(e) => setSubject(e.target.value)} required />
+          <TextField label={t('cases.parentWords')} value={body} onChange={(e) => setBody(e.target.value)} multiline minRows={4} required />
+          <FormControlLabel control={<Checkbox checked={forAdmin} onChange={(e) => setForAdmin(e.target.checked)} />} label={t('cases.forAdminCheck')} />
+          {create.isError && <Alert severity="error">{errorMessage(create.error, t)}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+        <Button variant="contained" onClick={() => create.mutate()} loading={create.isPending} disabled={!parentId || !subject.trim() || !body.trim()}>
+          {t('common.save')}
         </Button>
       </DialogActions>
     </Dialog>

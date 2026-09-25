@@ -199,6 +199,99 @@ export type Database = {
           },
         ]
       }
+      appointments: {
+        Row: {
+          created_at: string
+          created_by_member_id: string | null
+          ends_at: string
+          host_member_id: string | null
+          id: string
+          kind: string
+          notes: string | null
+          preinscription_id: string | null
+          school_id: string
+          starts_at: string
+          status: string
+          student_id: string | null
+          title: string
+          updated_at: string
+          visitor_name: string | null
+          visitor_phone: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by_member_id?: string | null
+          ends_at: string
+          host_member_id?: string | null
+          id?: string
+          kind?: string
+          notes?: string | null
+          preinscription_id?: string | null
+          school_id: string
+          starts_at: string
+          status?: string
+          student_id?: string | null
+          title: string
+          updated_at?: string
+          visitor_name?: string | null
+          visitor_phone?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by_member_id?: string | null
+          ends_at?: string
+          host_member_id?: string | null
+          id?: string
+          kind?: string
+          notes?: string | null
+          preinscription_id?: string | null
+          school_id?: string
+          starts_at?: string
+          status?: string
+          student_id?: string | null
+          title?: string
+          updated_at?: string
+          visitor_name?: string | null
+          visitor_phone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointments_created_by_member_id_fkey"
+            columns: ["created_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "school_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_host_member_id_fkey"
+            columns: ["host_member_id"]
+            isOneToOne: false
+            referencedRelation: "school_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_preinscription_id_school_id_fkey"
+            columns: ["preinscription_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "preinscriptions"
+            referencedColumns: ["id", "school_id"]
+          },
+          {
+            foreignKeyName: "appointments_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_student_id_school_id_fkey"
+            columns: ["student_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "school_id"]
+          },
+        ]
+      }
       attendance_records: {
         Row: {
           class_id: string
@@ -207,6 +300,8 @@ export type Database = {
           justification: string | null
           justified_at: string | null
           minutes_late: number | null
+          parent_notified_at: string | null
+          parent_notified_by_member_id: string | null
           recorded_by_member_id: string | null
           school_id: string
           session_date: string
@@ -222,6 +317,8 @@ export type Database = {
           justification?: string | null
           justified_at?: string | null
           minutes_late?: number | null
+          parent_notified_at?: string | null
+          parent_notified_by_member_id?: string | null
           recorded_by_member_id?: string | null
           school_id: string
           session_date: string
@@ -237,6 +334,8 @@ export type Database = {
           justification?: string | null
           justified_at?: string | null
           minutes_late?: number | null
+          parent_notified_at?: string | null
+          parent_notified_by_member_id?: string | null
           recorded_by_member_id?: string | null
           school_id?: string
           session_date?: string
@@ -259,6 +358,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "classes"
             referencedColumns: ["id", "school_id"]
+          },
+          {
+            foreignKeyName: "attendance_records_parent_notified_by_member_id_fkey"
+            columns: ["parent_notified_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "school_members"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "attendance_records_recorded_by_member_id_fkey"
@@ -334,8 +440,10 @@ export type Database = {
       }
       cases: {
         Row: {
+          channel: string
           created_at: string
           direction: string
+          for_admin: boolean
           id: string
           opened_by_member_id: string
           parent_member_id: string
@@ -349,8 +457,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          channel?: string
           created_at?: string
           direction: string
+          for_admin?: boolean
           id?: string
           opened_by_member_id: string
           parent_member_id: string
@@ -364,8 +474,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          channel?: string
           created_at?: string
           direction?: string
+          for_admin?: boolean
           id?: string
           opened_by_member_id?: string
           parent_member_id?: string
@@ -1258,6 +1370,58 @@ export type Database = {
           },
         ]
       }
+      payment_reminders: {
+        Row: {
+          by_member_id: string | null
+          channel: string
+          created_at: string
+          id: string
+          installment_id: string
+          note: string | null
+          school_id: string
+        }
+        Insert: {
+          by_member_id?: string | null
+          channel?: string
+          created_at?: string
+          id?: string
+          installment_id: string
+          note?: string | null
+          school_id: string
+        }
+        Update: {
+          by_member_id?: string | null
+          channel?: string
+          created_at?: string
+          id?: string
+          installment_id?: string
+          note?: string | null
+          school_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_reminders_by_member_id_fkey"
+            columns: ["by_member_id"]
+            isOneToOne: false
+            referencedRelation: "school_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_reminders_installment_id_school_id_fkey"
+            columns: ["installment_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "fee_installments"
+            referencedColumns: ["id", "school_id"]
+          },
+          {
+            foreignKeyName: "payment_reminders_installment_id_school_id_fkey"
+            columns: ["installment_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "installment_balances"
+            referencedColumns: ["id", "school_id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount: number
@@ -1316,6 +1480,163 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "school_members"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      preinscription_followups: {
+        Row: {
+          by_member_id: string | null
+          channel: string
+          created_at: string
+          id: string
+          note: string | null
+          preinscription_id: string
+          school_id: string
+        }
+        Insert: {
+          by_member_id?: string | null
+          channel?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          preinscription_id: string
+          school_id: string
+        }
+        Update: {
+          by_member_id?: string | null
+          channel?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          preinscription_id?: string
+          school_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "preinscription_followups_by_member_id_fkey"
+            columns: ["by_member_id"]
+            isOneToOne: false
+            referencedRelation: "school_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "preinscription_followups_preinscription_id_school_id_fkey"
+            columns: ["preinscription_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "preinscriptions"
+            referencedColumns: ["id", "school_id"]
+          },
+        ]
+      }
+      preinscriptions: {
+        Row: {
+          academic_year_id: string | null
+          birth_date: string | null
+          child_first_name: string
+          child_last_name: string
+          created_at: string
+          created_by_member_id: string | null
+          followup_count: number
+          id: string
+          last_followup_at: string | null
+          next_followup_on: string | null
+          node_id: string | null
+          notes: string | null
+          parent_email: string | null
+          parent_name: string
+          parent_phone: string | null
+          school_id: string
+          source: string | null
+          status: string
+          student_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          academic_year_id?: string | null
+          birth_date?: string | null
+          child_first_name: string
+          child_last_name: string
+          created_at?: string
+          created_by_member_id?: string | null
+          followup_count?: number
+          id?: string
+          last_followup_at?: string | null
+          next_followup_on?: string | null
+          node_id?: string | null
+          notes?: string | null
+          parent_email?: string | null
+          parent_name: string
+          parent_phone?: string | null
+          school_id: string
+          source?: string | null
+          status?: string
+          student_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          academic_year_id?: string | null
+          birth_date?: string | null
+          child_first_name?: string
+          child_last_name?: string
+          created_at?: string
+          created_by_member_id?: string | null
+          followup_count?: number
+          id?: string
+          last_followup_at?: string | null
+          next_followup_on?: string | null
+          node_id?: string | null
+          notes?: string | null
+          parent_email?: string | null
+          parent_name?: string
+          parent_phone?: string | null
+          school_id?: string
+          source?: string | null
+          status?: string
+          student_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "preinscriptions_academic_year_id_school_id_fkey"
+            columns: ["academic_year_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "academic_years"
+            referencedColumns: ["id", "school_id"]
+          },
+          {
+            foreignKeyName: "preinscriptions_created_by_member_id_fkey"
+            columns: ["created_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "school_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "preinscriptions_node_id_school_id_fkey"
+            columns: ["node_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "curriculum_nodes"
+            referencedColumns: ["id", "school_id"]
+          },
+          {
+            foreignKeyName: "preinscriptions_node_id_school_id_fkey"
+            columns: ["node_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "resolved_node_subject_hours"
+            referencedColumns: ["node_id", "school_id"]
+          },
+          {
+            foreignKeyName: "preinscriptions_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "preinscriptions_student_id_school_id_fkey"
+            columns: ["student_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "school_id"]
           },
         ]
       }
@@ -1463,6 +1784,159 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      staff_presence: {
+        Row: {
+          absent: boolean
+          arrived_at: string | null
+          created_at: string
+          day: string
+          expected_end: string | null
+          expected_start: string | null
+          id: string
+          left_at: string | null
+          member_id: string
+          note: string | null
+          recorded_by_member_id: string | null
+          school_id: string
+          updated_at: string
+        }
+        Insert: {
+          absent?: boolean
+          arrived_at?: string | null
+          created_at?: string
+          day: string
+          expected_end?: string | null
+          expected_start?: string | null
+          id?: string
+          left_at?: string | null
+          member_id: string
+          note?: string | null
+          recorded_by_member_id?: string | null
+          school_id: string
+          updated_at?: string
+        }
+        Update: {
+          absent?: boolean
+          arrived_at?: string | null
+          created_at?: string
+          day?: string
+          expected_end?: string | null
+          expected_start?: string | null
+          id?: string
+          left_at?: string | null
+          member_id?: string
+          note?: string | null
+          recorded_by_member_id?: string | null
+          school_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_presence_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "school_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_presence_recorded_by_member_id_fkey"
+            columns: ["recorded_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "school_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_presence_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_alerts: {
+        Row: {
+          created_at: string
+          created_by_member_id: string | null
+          days: number | null
+          ends_on: string | null
+          id: string
+          kind: string
+          note: string | null
+          notified_at: string | null
+          notified_by_member_id: string | null
+          school_id: string
+          starts_on: string
+          status: string
+          student_id: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_member_id?: string | null
+          days?: number | null
+          ends_on?: string | null
+          id?: string
+          kind: string
+          note?: string | null
+          notified_at?: string | null
+          notified_by_member_id?: string | null
+          school_id: string
+          starts_on?: string
+          status?: string
+          student_id: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_member_id?: string | null
+          days?: number | null
+          ends_on?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          notified_at?: string | null
+          notified_by_member_id?: string | null
+          school_id?: string
+          starts_on?: string
+          status?: string
+          student_id?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_alerts_created_by_member_id_fkey"
+            columns: ["created_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "school_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_alerts_notified_by_member_id_fkey"
+            columns: ["notified_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "school_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_alerts_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_alerts_student_id_school_id_fkey"
+            columns: ["student_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "school_id"]
+          },
+        ]
       }
       student_guardians: {
         Row: {
@@ -2120,6 +2594,14 @@ export type Database = {
           },
         ]
       }
+      installment_reminders: {
+        Row: {
+          installment_id: string | null
+          last_reminded_at: string | null
+          reminder_count: number | null
+        }
+        Relationships: []
+      }
       resolved_node_subject_hours: {
         Row: {
           academic_year_id: string | null
@@ -2396,6 +2878,10 @@ export type Database = {
       timetable_version_on: {
         Args: { p_class_id: string; p_date: string }
         Returns: string
+      }
+      update_member_contact: {
+        Args: { p_full_name: string; p_member_id: string; p_phone: string }
+        Returns: undefined
       }
     }
     Enums: {

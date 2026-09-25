@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -15,8 +15,6 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  Tab,
-  Tabs,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -32,6 +30,8 @@ import { errorMessage, must } from '#/lib/errors'
 import { InviteDialog } from '#/features/team/InviteDialog'
 import { membersQuery, type MemberRow } from '#/features/team/api'
 import { RoleDialog, type RoleOutcome } from '#/features/team/RoleDialog'
+import { ContactDialog, type ContactTarget } from '#/features/team/ContactDialog'
+import { formatPhone } from '#/lib/format'
 import { ImportDialog } from '#/features/import/ImportZone'
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
 import { tokens } from '#/theme/theme'
@@ -46,7 +46,6 @@ export const Route = createFileRoute('/_app/team')({
 })
 
 const STAFF_ROLES: Role[] = ['teacher', 'staff', 'admin']
-const TABS = ['staff', 'families'] as const
 
 function TeamPage() {
   const { t } = useI18n()
@@ -54,7 +53,7 @@ function TeamPage() {
   const queryClient = useQueryClient()
   const members = useQuery(membersQuery(ctx.school.id))
   const [open, setOpen] = useState(false)
-  const [tab, setTab] = useState<(typeof TABS)[number]>('staff')
+  const [contact, setContact] = useState<ContactTarget | null>(null)
   const search = Route.useSearch()
   const navigateSelf = Route.useNavigate()
   const [importing, setImporting] = useState(false)
@@ -93,10 +92,12 @@ function TeamPage() {
           </>
         }
       />
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, borderBottom: `1px solid ${tokens.line}` }}>
-        <Tab value="staff" label={t('team.tab.staff')} />
-        <Tab value="families" label={t('team.tab.families')} />
-      </Tabs>
+      <Alert severity="info" icon={false} sx={{ mb: 2 }}>
+        {t('team.familiesMoved')}{' '}
+        <Link to="/students" search={{ tab: 'parents' }}>
+          {t('team.familiesLink')}
+        </Link>
+      </Alert>
       {changed && changed.outcome !== 'unchanged' && (
         <Alert severity={changed.outcome === 'added' ? 'info' : 'success'} onClose={() => setChanged(null)} sx={{ mb: 2 }}>
           {t(`team.roleChanged.${changed.outcome}`, { name: changed.name, role: t(`role.${changed.role}`) })}
@@ -105,11 +106,8 @@ function TeamPage() {
       {toggle.isError && <Alert severity="error" sx={{ mb: 2 }}>{errorMessage(toggle.error, t)}</Alert>}
       <QueryState query={members} rows={5}>
         {(rows) => {
-          const shown = rows.filter((m) =>
-            tab === 'staff' ? STAFF_ROLES.includes(m.role) : m.role === 'parent' || m.role === 'student',
-          )
-          if (shown.length === 0)
-            return <EmptyState title={t('team.empty')} hint={tab === 'staff' ? t('team.emptyHint') : t('team.familiesHint')} />
+          const shown = rows.filter((m) => STAFF_ROLES.includes(m.role))
+          if (shown.length === 0) return <EmptyState title={t('team.empty')} hint={t('team.emptyHint')} />
           return (
             <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
               <Table size="small">
@@ -117,6 +115,7 @@ function TeamPage() {
                   <TableRow>
                     <TableCell>{t('common.name')}</TableCell>
                     <TableCell>{t('auth.email')}</TableCell>
+                    <TableCell>{t('common.phone')}</TableCell>
                     <TableCell>{t('team.role')}</TableCell>
                     <TableCell>{t('team.active')}</TableCell>
                   </TableRow>
@@ -135,6 +134,22 @@ function TeamPage() {
                       </TableCell>
                       <TableCell dir="ltr" sx={{ textAlign: 'start' }}>
                         {m.user?.email ?? '—'}
+                      </TableCell>
+                      <TableCell dir="ltr" sx={{ textAlign: 'start', whiteSpace: 'nowrap' }}>
+                        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                          <span>{formatPhone(m.user?.phone) || '—'}</span>
+                          {(ctx.isAdmin || m.user?.id === ctx.user.id) && m.user && (
+                            <Tooltip title={t('contact.title')}>
+                              <IconButton
+                                size="small"
+                                aria-label={`${t('contact.title')} — ${m.user.full_name}`}
+                                onClick={() => setContact({ memberId: m.id, fullName: m.user!.full_name, phone: m.user!.phone, email: m.user!.email })}
+                              >
+                                <EditOutlined sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </Stack>
                       </TableCell>
                       <TableCell>
                         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
@@ -169,6 +184,7 @@ function TeamPage() {
           {t('team.footnote')}
         </Typography>
       </Box>
+      {contact && <ContactDialog target={contact} schoolId={ctx.school.id} onClose={() => setContact(null)} />}
       {editing && (
         <RoleDialog
           member={editing}

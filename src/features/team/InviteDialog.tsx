@@ -15,6 +15,7 @@ import {
 import { inviteMember } from '#/lib/members'
 import { useI18n } from '#/i18n/i18n'
 import { errorMessage } from '#/lib/errors'
+import { normalizePhone } from '#/lib/format'
 import type { Role } from '#/lib/session'
 import { tokens } from '#/theme/theme'
 
@@ -45,12 +46,13 @@ export function InviteDialog({
   const queryClient = useQueryClient()
   const [fullName, setFullName] = useState(defaultName)
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [role, setRole] = useState<Role>(roles[0])
   const [password, setPassword] = useState('')
   const [result, setResult] = useState<InviteResult | null>(null)
 
   const invite = useMutation({
-    mutationFn: () => inviteMember({ data: { schoolId, email, fullName, role, password: password || undefined, studentId } }),
+    mutationFn: () => inviteMember({ data: { schoolId, email, fullName, phone: normalizePhone(phone), role, password: password || undefined, studentId } }),
     onSuccess: async (r) => {
       await onCreated?.(r)
       await queryClient.invalidateQueries({ queryKey: ['school', schoolId] })
@@ -61,6 +63,7 @@ export function InviteDialog({
   const close = () => {
     setResult(null)
     setEmail('')
+    setPhone('')
     setPassword('')
     setFullName(defaultName)
     invite.reset()
@@ -112,6 +115,14 @@ export function InviteDialog({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                slotProps={{ htmlInput: { dir: 'ltr' } }}
+              />
+              <TextField
+                label={t('common.phone')}
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="06 12 34 56 78"
                 slotProps={{ htmlInput: { dir: 'ltr' } }}
               />
               {roles.length > 1 && (

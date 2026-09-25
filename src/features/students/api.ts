@@ -41,6 +41,8 @@ export const studentsQuery = (schoolId: string) =>
       ) as unknown as StudentRow[],
   })
 
+export type ParentRow = { id: string; status: 'active' | 'inactive'; user: { full_name: string; email: string | null; phone: string | null } | null }
+
 export const parentsQuery = (schoolId: string) =>
   queryOptions({
     queryKey: ['school', schoolId, 'parents'],
@@ -49,10 +51,10 @@ export const parentsQuery = (schoolId: string) =>
         must(
           await supabase
             .from('school_members')
-            .select('id, user:users(full_name, email)')
+            .select('id, status, user:users(full_name, email, phone)')
             .eq('school_id', schoolId)
             .eq('role', 'parent'),
-        ) as unknown as { id: string; user: { full_name: string; email: string | null } | null }[]
+        ) as unknown as ParentRow[]
       ).sort((a, b) => (a.user?.full_name ?? '').localeCompare(b.user?.full_name ?? '')),
   })
 

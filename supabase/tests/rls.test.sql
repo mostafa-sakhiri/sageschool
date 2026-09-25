@@ -16,7 +16,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(48);
+SELECT plan(67);
 
 -- Impersonate a user: JWT claims + the authenticated role (RESET ROLE first).
 CREATE FUNCTION pg_temp.login(p_email text) RETURNS void LANGUAGE plpgsql AS $$
@@ -311,6 +311,98 @@ SELECT is((
   'cross-school: admin B reads zero classes/announcements/cases/payments/attendance/school of A');
 SELECT is_empty($$UPDATE schools SET name = 'x' WHERE id = '5c000000-0000-0000-0000-00000000000a' RETURNING id$$,
   'cross-school: admin B cannot update school A');
+RESET ROLE;
+
+-- ---------------------------------------------------------------------
+-- Office follow-up (migration 20260926090000)
+-- ---------------------------------------------------------------------
+-- Scolarité: the secrétariat has no access until the admin allows it
+SELECT pg_temp.login('staff.a@test.ma');
+SELECT is((SELECT count(*) FROM fee_installments WHERE school_id = '5c000000-0000-0000-0000-00000000000a')::int, 0,
+  'fees: staff sees no installment while staff_fees_access is off');
+SELECT throws_ok($$INSERT INTO payments (school_id, installment_id, amount, recorded_by_member_id)
+                   VALUES ('5c000000-0000-0000-0000-00000000000a', '74000000-0000-0000-0000-000000000001', 100,
+                           'b1000000-0000-0000-0000-000000000002')$$,
+  '42501', NULL, 'fees: staff cannot record a payment while access is off');
+RESET ROLE;
+UPDATE schools SET settings = settings || '{"staff_fees_access": true}' WHERE id = '5c000000-0000-0000-0000-00000000000a';
+SELECT pg_temp.login('staff.a@test.ma');
+SELECT is((SELECT count(*) FROM fee_installments WHERE school_id = '5c000000-0000-0000-0000-00000000000a')::int, 2,
+  'fees: staff sees the installments once the admin allows it');
+SELECT lives_ok($$INSERT INTO payment_reminders (school_id, installment_id, channel)
+                  VALUES ('5c000000-0000-0000-0000-00000000000a', '74000000-0000-0000-0000-000000000001', 'whatsapp')$$,
+  'fees: staff records a payment reminder');
+RESET ROLE;
+SELECT is((SELECT count(*) FROM notification_outbox WHERE kind = 'payment_reminder'
+           AND recipient_user_id = (SELECT id FROM users WHERE email = 'pa@test.ma'))::int, 1,
+  'fees: the reminder is stubbed to the paying parent');
+
+-- Complaint entered by the secrétariat for the admin, in a parent's name
+SELECT pg_temp.login('staff.a@test.ma');
+SELECT lives_ok($$INSERT INTO cases (id, school_id, direction, channel, for_admin, subject, parent_member_id, opened_by_member_id)
+                  VALUES ('76000000-0000-0000-0000-000000000003', '5c000000-0000-0000-0000-00000000000a', 'parent_to_school',
+                          'phone', true, 'Bus en retard', 'b1000000-0000-0000-0000-000000000006', 'b1000000-0000-0000-0000-000000000002');
+                  INSERT INTO case_messages (school_id, case_id, author_member_id, body)
+                  VALUES ('5c000000-0000-0000-0000-00000000000a', '76000000-0000-0000-0000-000000000003',
+                          'b1000000-0000-0000-0000-000000000002', 'Le parent signale un bus en retard.')$$,
+  'complaints: staff enters a phone complaint for the admin');
+RESET ROLE;
+SELECT is((SELECT status FROM cases WHERE id = '76000000-0000-0000-0000-000000000003'), 'open',
+  'complaints: the parent''s words keep the case open');
+SELECT is((SELECT count(*) FROM notification_outbox WHERE ref_id = '76000000-0000-0000-0000-000000000003')::int, 0,
+  'complaints: nothing is sent to the parent for their own complaint');
+SELECT pg_temp.login('pa@test.ma');
+SELECT throws_ok($$INSERT INTO cases (school_id, direction, channel, subject, parent_member_id, opened_by_member_id)
+                   VALUES ('5c000000-0000-0000-0000-00000000000a', 'parent_to_school', 'phone', 'x',
+                           'b1000000-0000-0000-0000-000000000005', 'b1000000-0000-0000-0000-000000000005')$$,
+  '42501', NULL, 'complaints: a parent cannot pose as the office (channel phone)');
+RESET ROLE;
+
+-- 3 school days of absence in a row -> an alert (S3 already absent Mon 10-05)
+SELECT pg_temp.login('staff.a@test.ma');
+INSERT INTO attendance_records (school_id, class_id, student_id, session_date, status) VALUES
+  ('5c000000-0000-0000-0000-00000000000a', 'd1000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000003', '2026-10-06', 'absent'),
+  ('5c000000-0000-0000-0000-00000000000a', 'd1000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000003', '2026-10-07', 'absent');
+SELECT is((SELECT days FROM student_alerts WHERE student_id = 'c1000000-0000-0000-0000-000000000003' AND kind = 'absence_streak'), 3,
+  'alerts: 3 consecutive school days of absence create an alert');
+SELECT lives_ok($$UPDATE student_alerts SET status = 'notified', notified_at = now(),
+                  notified_by_member_id = 'b1000000-0000-0000-0000-000000000002'
+                  WHERE student_id = 'c1000000-0000-0000-0000-000000000003'$$,
+  'alerts: staff marks the parent as notified');
+INSERT INTO appointments (school_id, kind, title, starts_at, ends_at)
+  VALUES ('5c000000-0000-0000-0000-00000000000a', 'visit_parent', 'RDV', '2026-10-08 10:00+01', '2026-10-08 10:30+01');
+INSERT INTO preinscriptions (school_id, child_first_name, child_last_name, parent_name, parent_phone)
+  VALUES ('5c000000-0000-0000-0000-00000000000a', 'Nour', 'Test', 'Parent Test', '+212600000000');
+INSERT INTO staff_presence (school_id, member_id, day, arrived_at)
+  VALUES ('5c000000-0000-0000-0000-00000000000a', 'b1000000-0000-0000-0000-000000000003', '2026-10-05', '08:40');
+RESET ROLE;
+SELECT pg_temp.login('pa@test.ma');
+SELECT is((SELECT count(*) FROM student_alerts)::int + (SELECT count(*) FROM appointments)::int
+          + (SELECT count(*) FROM preinscriptions)::int + (SELECT count(*) FROM staff_presence)::int, 0,
+  'office data: a parent reads no alert, appointment, pre-registration or staff presence');
+RESET ROLE;
+SELECT pg_temp.login('t1@test.ma');
+SELECT is((SELECT count(*) FROM staff_presence)::int, 1, 'staff presence: a teacher sees their own record');
+SELECT is((SELECT count(*) FROM appointments)::int + (SELECT count(*) FROM preinscriptions)::int, 0,
+  'office data: a teacher reads no appointment or pre-registration');
+RESET ROLE;
+SELECT pg_temp.login('t2@test.ma');
+SELECT is((SELECT count(*) FROM staff_presence)::int, 0, 'staff presence: a teacher does not see a colleague''s record');
+RESET ROLE;
+
+-- Contact details through update_member_contact
+SELECT pg_temp.login('staff.a@test.ma');
+SELECT lives_ok($$SELECT update_member_contact('b1000000-0000-0000-0000-000000000005', 'Parent A', '0612345678')$$,
+  'contact: staff updates a parent''s phone');
+SELECT throws_ok($$SELECT update_member_contact('b1000000-0000-0000-0000-000000000003', 'Teacher One', '0612345679')$$,
+  '42501', NULL, 'contact: staff cannot change a teacher''s details');
+RESET ROLE;
+SELECT is((SELECT phone FROM users WHERE email = 'pa@test.ma'), '0612345678', 'contact: the phone is stored');
+
+SELECT pg_temp.login('admin.b@test.ma');
+SELECT is((SELECT count(*) FROM student_alerts)::int + (SELECT count(*) FROM appointments)::int
+          + (SELECT count(*) FROM preinscriptions)::int + (SELECT count(*) FROM payment_reminders)::int, 0,
+  'cross-school: admin B reads none of school A''s alerts, appointments, pre-registrations, reminders');
 RESET ROLE;
 
 SELECT * FROM finish();
