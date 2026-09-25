@@ -62,6 +62,8 @@ const NAV: NavItem[] = [
 
 export const SIDEBAR_WIDTH = 236
 
+const visuallyHidden = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' } as const
+
 export function AppShell({ title, children }: { title?: string; children: React.ReactNode }) {
   const theme = useTheme()
   const desktop = useMediaQuery(theme.breakpoints.up('md'))
@@ -90,34 +92,38 @@ export function AppShell({ title, children }: { title?: string; children: React.
         </Drawer>
       )}
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <Box
-          component="header"
-          sx={{
-            height: 56,
-            px: { xs: 2, md: 3.5 },
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            bgcolor: tokens.header,
-            backdropFilter: 'saturate(180%) blur(12px)',
-            borderBottom: `1px solid ${tokens.line}`,
-            position: 'sticky',
-            top: 0,
-            zIndex: 10,
-          }}
-        >
-          {!desktop && (
-            <IconButton aria-label={t('nav.openMenu')} onClick={() => setOpen(true)} edge="start">
-              <MenuIcon />
-            </IconButton>
-          )}
-          <Typography component="h1" variant="h4" noWrap sx={{ flex: 1, minWidth: 0 }}>
+        {/* Desktop: no header, the page intro carries the title; the h1 stays
+            for screen readers. Mobile: a slim bar to open the menu. */}
+        {desktop ? (
+          <Typography component="h1" sx={visuallyHidden}>
             {title}
           </Typography>
-          <ThemeToggle />
-          <LanguageToggle />
-        </Box>
-        <Box component="main" sx={{ flex: 1, minWidth: 0, p: { xs: 2, md: 3.5 } }}>
+        ) : (
+          <Box
+            component="header"
+            sx={{
+              height: 52,
+              px: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              bgcolor: tokens.header,
+              backdropFilter: 'saturate(180%) blur(12px)',
+              borderBottom: `1px solid ${tokens.line}`,
+              position: 'sticky',
+              top: 0,
+              zIndex: 10,
+            }}
+          >
+            <IconButton aria-label={t('nav.openMenu')} onClick={() => setOpen(true)}>
+              <MenuIcon />
+            </IconButton>
+            <Typography component="h1" variant="h4" noWrap sx={{ flex: 1, minWidth: 0 }}>
+              {title}
+            </Typography>
+          </Box>
+        )}
+        <Box component="main" sx={{ flex: 1, minWidth: 0, p: { xs: 2, md: 4 }, pt: { md: 4.5 } }}>
           {children}
         </Box>
       </Box>
@@ -219,6 +225,10 @@ function Sidebar({ onNavigate }: { onNavigate: () => void }) {
       </Stack>
 
       <Box sx={{ flex: 1 }} />
+      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', px: 0.5, pt: 1.5, borderTop: `1px solid ${tokens.line}` }}>
+        <LanguageToggle />
+        <ThemeToggle />
+      </Stack>
       <UserCard />
     </Box>
   )
@@ -259,7 +269,7 @@ function UserCard() {
         <Button
           onClick={(e) => setAnchor(e.currentTarget)}
           sx={{
-            mt: 1.5,
+            mt: 1,
             justifyContent: 'flex-start',
             gap: 1.25,
             p: 0.75,
