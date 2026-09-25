@@ -204,11 +204,11 @@ export function ImportZone({ kind }: { kind: ImportKind }) {
       sx={{
         p: 2.5,
         borderColor: dragOver ? tokens.accent : parsed ? tokens.accentLine : tokens.lineSoft,
-        bgcolor: parsed ? '#F4F9F7' : '#fff',
+        bgcolor: parsed ? tokens.accentSoft : tokens.card,
       }}
     >
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'flex-start' } }}>
-        <Box sx={{ width: 40, height: 40, borderRadius: '11px', display: 'grid', placeItems: 'center', bgcolor: parsed ? tokens.accentSoft : '#F2EEE4', color: parsed ? tokens.accentDark : tokens.inkMuted, flexShrink: 0 }}>
+        <Box sx={{ width: 40, height: 40, borderRadius: '11px', display: 'grid', placeItems: 'center', bgcolor: parsed ? tokens.accentSoft : tokens.fill, color: parsed ? tokens.accentDark : tokens.inkMuted, flexShrink: 0 }}>
           {ICONS[kind]}
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -286,7 +286,7 @@ export function ImportZone({ kind }: { kind: ImportKind }) {
           {!result && parsed && rows.length > 0 && <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted }}>{t('import.notYet')}</Typography>}
 
           <Collapse in={showDetail && !!parsed} unmountOnExit>
-            <Box sx={{ maxHeight: 320, overflow: 'auto', border: `1px solid ${tokens.lineSoft}`, borderRadius: 2, bgcolor: '#fff' }}>
+            <Box sx={{ maxHeight: 320, overflow: 'auto', border: `1px solid ${tokens.lineSoft}`, borderRadius: 2, bgcolor: tokens.card }}>
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>

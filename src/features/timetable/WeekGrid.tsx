@@ -58,7 +58,7 @@ export function WeekGrid({
   for (let m = Math.ceil(earliest / 60) * 60; m <= latest; m += 60) hours.push(m)
 
   return (
-    <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
+    <Paper variant="outlined" sx={{ overflowX: 'auto', bgcolor: tokens.content }}>
       <Box sx={{ display: 'grid', gridTemplateColumns: `52px repeat(${days.length}, minmax(130px, 1fr))`, minWidth: 52 + days.length * 130 }}>
         <Box />
         {days.map((d) => (
@@ -106,7 +106,7 @@ export function WeekGrid({
                         insetInline: 0,
                         top: (from - earliest) * scale,
                         height: (to - from) * scale,
-                        bgcolor: tokens.paper,
+                        bgcolor: tokens.card,
                         backgroundImage: `repeating-linear-gradient(135deg, transparent 0 6px, ${tokens.lineSoft} 6px 7px)`,
                       }}
                     />
@@ -125,7 +125,7 @@ export function WeekGrid({
                     top: (toMin(b.start) - earliest) * scale,
                     height: Math.max(12, (toMin(b.end) - toMin(b.start)) * scale - 2),
                     borderRadius: '8px',
-                    bgcolor: b.kind === 'nap' ? '#EFEBF6' : b.kind === 'recess' ? '#FBF3E3' : '#F4F1EA',
+                    bgcolor: b.kind === 'nap' ? tokens.napBg : b.kind === 'recess' ? tokens.recessBg : tokens.fill,
                     border: `1px dashed ${tokens.line}`,
                     px: 0.75,
                     display: 'flex',

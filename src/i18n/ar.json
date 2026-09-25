@@ -502,6 +502,8 @@
   "team.teacherKeeps": "إذا كانت لديه أقسام أو حصص، يحتفظ أيضًا بدور الأستاذ: لا يتغير استعمال زمنه.",
   "team.title": "فريق المؤسسة",
   "team.you": "أنتم",
+  "theme.dark": "الوضع الداكن",
+  "theme.light": "الوضع الفاتح",
   "tt.addSlot": "إضافة حصة",
   "tt.added": "مضافة",
   "tt.availability": "البرنامج: {program} — الوقت المتاح للأنشطة: {available}.",

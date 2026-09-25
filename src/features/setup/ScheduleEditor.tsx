@@ -293,7 +293,7 @@ function WeekPreview({ h, onPick, selected }: { h: Horaire; onPick: (d: string) 
               {dayNames[Number(d) - 1]}
               {h.overrides[d] ? ' •' : ''}
             </Typography>
-            <Box sx={{ position: 'relative', flex: 1, height: 22, bgcolor: tokens.paper, borderRadius: 1 }}>
+            <Box sx={{ position: 'relative', flex: 1, height: 22, bgcolor: tokens.fill, borderRadius: 1 }}>
               <Box
                 sx={{
                   position: 'absolute',
@@ -314,7 +314,7 @@ function WeekPreview({ h, onPick, selected }: { h: Horaire; onPick: (d: string) 
                       width: `${(Math.max(0, toMin(p.end) - toMin(p.start)) / span) * 100}%`,
                       top: 3,
                       bottom: 3,
-                      bgcolor: p.kind === 'nap' ? '#D9D3E8' : p.kind === 'recess' ? '#F1DDB6' : tokens.lineStrong,
+                      bgcolor: p.kind === 'nap' ? tokens.napBar : p.kind === 'recess' ? tokens.recessBar : tokens.lineStrong,
                       borderRadius: 0.75,
                     }}
                   />

@@ -16,7 +16,7 @@ import { currentEnrollment, studentsQuery } from '#/features/students/api'
 import { subjectsQuery } from '#/features/structure/api'
 import { membersNamesQuery, subjectColor, type DaySession, type TeacherSession } from '#/features/timetable/api'
 import { announcementsQuery, balancesQuery, casesQuery, homeworkQuery } from '#/features/queries'
-import { tokens } from '#/theme/theme'
+import { subjectTokens, tokens } from '#/theme/theme'
 
 export const Route = createFileRoute('/_app/')({ component: Dashboard })
 
@@ -58,11 +58,11 @@ function TodoList({ items }: { items: Todo[] }) {
             gap: 1.75,
             alignItems: 'center',
             flexWrap: { xs: 'wrap', sm: 'nowrap' },
-            bgcolor: a.urgent ? tokens.cardWarm : '#fff',
+            bgcolor: a.urgent ? tokens.cardWarm : tokens.card,
             borderColor: a.urgent ? tokens.warnLine : tokens.lineSoft,
           }}
         >
-          <Box sx={{ width: 34, height: 34, borderRadius: '10px', display: 'grid', placeItems: 'center', bgcolor: a.urgent ? tokens.warnSoft : '#F2EEE4', color: a.urgent ? '#9A5B12' : tokens.inkMuted, flexShrink: 0 }}>
+          <Box sx={{ width: 34, height: 34, borderRadius: '10px', display: 'grid', placeItems: 'center', bgcolor: a.urgent ? tokens.warnSoft : tokens.fill, color: a.urgent ? tokens.warn : tokens.inkMuted, flexShrink: 0 }}>
             <WarningAmberOutlined fontSize="small" />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -154,7 +154,7 @@ function OfficeDash() {
           <Stack spacing={1.25}>
             {(absences.data ?? []).map((a) => (
               <Stack key={a.id} direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
-                <Avatar sx={{ width: 26, height: 26, fontSize: 10.5, bgcolor: '#F7E9E2', color: '#7A4423' }}>{initials(fullName(a.student))}</Avatar>
+                <Avatar sx={{ width: 26, height: 26, fontSize: 10.5, bgcolor: subjectTokens(1).bg, color: subjectTokens(1).ink }}>{initials(fullName(a.student))}</Avatar>
                 <Typography sx={{ flex: 1, fontSize: 13.5, fontWeight: 500 }}>
                   {fullName(a.student)} <span style={{ color: tokens.inkMuted }}>· {a.class?.name}</span>
                 </Typography>
@@ -300,7 +300,7 @@ function ParentDash() {
           return (
             <Paper key={k.id} variant="outlined" sx={{ p: 2, flex: '1 1 280px', borderColor: absent ? tokens.warnLine : tokens.lineSoft }}>
               <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-                <Avatar sx={{ bgcolor: '#E7EEF7', color: '#2A4A6B', fontWeight: 700 }}>{initials(fullName(k))}</Avatar>
+                <Avatar sx={{ bgcolor: subjectTokens(0).bg, color: subjectTokens(0).ink }}>{initials(fullName(k))}</Avatar>
                 <Box sx={{ flex: 1 }}>
                   <Typography sx={{ fontWeight: 600 }}>{k.first_name}</Typography>
                   <Typography sx={{ fontSize: 13, color: tokens.inkMuted }}>{currentEnrollment(k, ctx.year?.id)?.class?.name ?? '—'}</Typography>

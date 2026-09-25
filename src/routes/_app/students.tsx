@@ -40,7 +40,7 @@ import { InviteDialog } from '#/features/team/InviteDialog'
 import { AddStudentDialog } from '#/features/students/AddStudentDialog'
 import { ImportDialog } from '#/features/import/ImportZone'
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
-import { tokens } from '#/theme/theme'
+import { subjectTokens, tokens } from '#/theme/theme'
 
 export const Route = createFileRoute('/_app/students')({
   // ?import=1 opens the Excel import (quick actions)
@@ -145,7 +145,7 @@ function StudentsPage() {
                     <TableRow key={s.id} hover onClick={() => setOpenId(s.id)} sx={{ cursor: 'pointer' }}>
                       <TableCell>
                         <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
-                          <Avatar sx={{ width: 28, height: 28, fontSize: 11, bgcolor: '#E7EEF7', color: '#2A4A6B' }}>
+                          <Avatar sx={{ width: 28, height: 28, fontSize: 11, bgcolor: subjectTokens(0).bg, color: subjectTokens(0).ink }}>
                             {initials(fullName(s))}
                           </Avatar>
                           <Button
@@ -336,7 +336,7 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
       {student.guardians.length === 0 && <Typography color="text.secondary">{t('students.noParentYet')}</Typography>}
       {student.guardians.map((g) => (
         <Stack key={g.guardian_member_id} direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-          <Avatar sx={{ width: 30, height: 30, fontSize: 11, bgcolor: '#F7E9E2', color: '#7A4423' }}>
+          <Avatar sx={{ width: 30, height: 30, fontSize: 11, bgcolor: subjectTokens(1).bg, color: subjectTokens(1).ink }}>
             {initials(g.member?.user?.full_name ?? '?')}
           </Avatar>
           <Box sx={{ flex: 1, minWidth: 0 }}>

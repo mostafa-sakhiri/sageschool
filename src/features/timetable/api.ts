@@ -2,6 +2,7 @@ import { queryOptions } from '@tanstack/react-query'
 import { supabase } from '#/lib/supabase/client'
 import { must } from '#/lib/errors'
 import { addDays } from '#/lib/format'
+import { SUBJECT_COUNT, subjectTokens, tokens } from '#/theme/theme'
 
 export type Version = {
   id: string
@@ -116,22 +117,12 @@ export const membersNamesQuery = (schoolId: string) =>
     },
   })
 
-// Stable colour per subject (mockup palette), keyed by id.
-const PALETTE = [
-  { bg: '#E7EEF7', ink: '#2A4A6B' },
-  { bg: '#F7E9E2', ink: '#7A4423' },
-  { bg: '#F0EAF7', ink: '#57407A' },
-  { bg: '#FBF0DC', ink: '#7A5210' },
-  { bg: '#E4F0EC', ink: '#0A5347' },
-  { bg: '#F5E6EC', ink: '#7A2F4E' },
-  { bg: '#EAF1E1', ink: '#3F5A1E' },
-  { bg: '#E8EEF0', ink: '#34525C' },
-]
+// Stable colour per subject, keyed by id (theme-aware CSS variables).
 export function subjectColor(id: string | null | undefined) {
-  if (!id) return { bg: '#F2EEE4', ink: '#6B655A' }
+  if (!id) return { bg: tokens.fill, ink: tokens.inkMuted }
   let h = 0
   for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0
-  return PALETTE[h % PALETTE.length]
+  return subjectTokens(h % SUBJECT_COUNT)
 }
 
 // Where the given teachers already teach in other classes (published trames

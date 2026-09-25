@@ -17,7 +17,6 @@ import { useSchool, type Role } from '#/lib/session'
 import { AddStudentDialog } from '#/features/students/AddStudentDialog'
 import { InviteDialog } from '#/features/team/InviteDialog'
 import { NewYearDialog } from './ContextSwitcher'
-import { tokens } from '#/theme/theme'
 
 type Dialogs = 'student' | 'year' | 'member' | null
 
@@ -78,11 +77,9 @@ export function QuickActions({ onDone }: { onDone?: () => void }) {
         onClick={(e) => setAnchor(e.currentTarget)}
         aria-haspopup="menu"
         sx={{
-          mb: 2,
+          mb: 1.5,
           justifyContent: 'flex-start',
-          px: 1.5,
-          bgcolor: tokens.accent,
-          '&:hover': { bgcolor: tokens.accentDark },
+          px: 1.25,
         }}
       >
         {t('quick.new')}

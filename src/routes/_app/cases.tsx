@@ -192,7 +192,7 @@ function Thread({ c }: { c: CaseRow }) {
                 maxWidth: '85%',
                 p: 1.5,
                 borderRadius: 3,
-                bgcolor: fromSchool ? tokens.accentSoft : '#F2EEE4',
+                bgcolor: fromSchool ? tokens.accentSoft : tokens.fill,
                 border: `1px solid ${fromSchool ? tokens.accentLine : tokens.lineSoft}`,
               }}
             >

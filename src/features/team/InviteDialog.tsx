@@ -81,7 +81,7 @@ export function InviteDialog({
                 <Typography>{t('team.handOver')}</Typography>
                 <Typography
                   dir="ltr"
-                  sx={{ fontFamily: 'IBM Plex Mono, monospace', p: 1.5, bgcolor: tokens.paper, borderRadius: 2 }}
+                  sx={{ fontFamily: 'IBM Plex Mono, monospace', p: 1.5, bgcolor: tokens.fill, borderRadius: 2 }}
                 >
                   {email} · {result.password}
                 </Typography>

@@ -409,7 +409,7 @@ function VersionEditor({ classId, version }: { classId: string; version: Version
                 cursor: startDrag ? 'grab' : undefined,
                 touchAction: startDrag ? 'none' : undefined,
                 userSelect: 'none',
-                '&:hover': startDrag ? { boxShadow: '0 2px 8px rgba(28,26,22,0.12)' } : undefined,
+                '&:hover': startDrag ? { boxShadow: tokens.shadowMd } : undefined,
               }}
             >
               <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
@@ -550,7 +550,7 @@ function VersionEditor({ classId, version }: { classId: string; version: Version
                 <Button
                   color="inherit"
                   size="small"
-                  sx={{ fontWeight: 700, color: '#9FE0CF' }}
+                  sx={{ fontWeight: 700, color: '#AEB4FA' }}
                   onClick={() => {
                     const undo = toast.undo!
                     setToast(null)

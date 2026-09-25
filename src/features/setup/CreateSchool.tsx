@@ -170,7 +170,7 @@ export function CreateSchool({ step, onStep }: { step: 1 | 2; onStep: (s: number
               <Paper
                 key={c.code}
                 variant="outlined"
-                sx={{ p: 2, borderColor: on ? tokens.accent : tokens.lineSoft, bgcolor: on ? '#F4F9F7' : '#fff' }}
+                sx={{ p: 2, borderColor: on ? tokens.accent : tokens.lineSoft, bgcolor: on ? tokens.accentSoft : tokens.card }}
               >
                 <FormGroup>
                   <FormControlLabel

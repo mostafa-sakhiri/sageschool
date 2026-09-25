@@ -35,7 +35,7 @@ export function EmptyState({
   return (
     <Paper
       variant="outlined"
-      sx={{ p: 4, textAlign: 'center', bgcolor: tokens.cardWarm, borderStyle: 'dashed' }}
+      sx={{ p: 4, textAlign: 'center', bgcolor: tokens.card, borderStyle: 'dashed' }}
     >
       <InboxOutlined sx={{ color: tokens.inkMuted, fontSize: 32 }} />
       <Typography variant="h5" sx={{ mt: 1 }}>

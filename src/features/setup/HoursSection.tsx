@@ -219,7 +219,7 @@ function HoursRow({
         p: 1.25,
         borderRadius: 2,
         border: `1px solid ${tokens.lineSoft}`,
-        bgcolor: minutes ? '#fff' : tokens.paper,
+        bgcolor: minutes ? tokens.surface : tokens.fill,
       }}
     >
       <Box sx={{ flex: 1, minWidth: 0 }}>

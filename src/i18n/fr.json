@@ -502,6 +502,8 @@
   "team.teacherKeeps": "S'il a encore des classes ou des séances, il garde aussi le rôle Professeur : son emploi du temps n'est pas touché.",
   "team.title": "L'équipe de l'école",
   "team.you": "vous",
+  "theme.dark": "Passer en mode sombre",
+  "theme.light": "Passer en mode clair",
   "tt.addSlot": "Ajouter une séance",
   "tt.added": "ajoutée",
   "tt.availability": "Programme : {program} — temps d'activité disponible : {available}.",

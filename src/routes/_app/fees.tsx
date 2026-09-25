@@ -343,7 +343,7 @@ function PlanDialog({ onClose }: { onClose: () => void }) {
                 </MenuItem>
               ))}
           </TextField>
-          <Box sx={{ p: 1.5, bgcolor: tokens.paper, borderRadius: 2 }}>
+          <Box sx={{ p: 1.5, bgcolor: tokens.fill, borderRadius: 2 }}>
             <Typography sx={{ fontSize: 14 }}>
               {t('fees.preview', { students: targets.length, n: frequency === 'monthly' ? Number(months) || 0 : 1 })}
             </Typography>

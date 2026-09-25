@@ -16,6 +16,7 @@ import {
   ToggleButtonGroup,
   Tooltip,
   Typography,
+  useColorScheme,
   useMediaQuery,
   useTheme,
 } from '@mui/material'
@@ -34,6 +35,8 @@ import MenuIcon from '@mui/icons-material/Menu'
 import LogoutOutlined from '@mui/icons-material/LogoutOutlined'
 import SwapHorizOutlined from '@mui/icons-material/SwapHorizOutlined'
 import CheckOutlined from '@mui/icons-material/CheckOutlined'
+import LightModeOutlined from '@mui/icons-material/LightModeOutlined'
+import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined'
 import { useI18n } from '#/i18n/i18n'
 import { rememberRole, rememberSchool, useSchool, type Role } from '#/lib/session'
 import { supabase } from '#/lib/supabase/client'
@@ -90,12 +93,13 @@ export function AppShell({ title, children }: { title?: string; children: React.
         <Box
           component="header"
           sx={{
-            height: 64,
+            height: 56,
             px: { xs: 2, md: 3.5 },
             display: 'flex',
             alignItems: 'center',
-            gap: 2,
-            bgcolor: '#FFFFFF',
+            gap: 1,
+            bgcolor: tokens.header,
+            backdropFilter: 'saturate(180%) blur(12px)',
             borderBottom: `1px solid ${tokens.line}`,
             position: 'sticky',
             top: 0,
@@ -110,6 +114,7 @@ export function AppShell({ title, children }: { title?: string; children: React.
           <Typography component="h1" variant="h4" noWrap sx={{ flex: 1, minWidth: 0 }}>
             {title}
           </Typography>
+          <ThemeToggle />
           <LanguageToggle />
         </Box>
         <Box component="main" sx={{ flex: 1, minWidth: 0, p: { xs: 2, md: 3.5 } }}>
@@ -117,6 +122,21 @@ export function AppShell({ title, children }: { title?: string; children: React.
         </Box>
       </Box>
     </Box>
+  )
+}
+
+// Light / dark, remembered per browser by MUI (localStorage).
+export function ThemeToggle() {
+  const { t } = useI18n()
+  const { mode, systemMode, setMode } = useColorScheme()
+  const isDark = (mode === 'system' ? systemMode : mode) === 'dark'
+  const label = t(isDark ? 'theme.light' : 'theme.dark')
+  return (
+    <Tooltip title={label}>
+      <IconButton aria-label={label} onClick={() => setMode(isDark ? 'light' : 'dark')} size="small" sx={{ width: 32, height: 32 }}>
+        {isDark ? <LightModeOutlined sx={{ fontSize: 18 }} /> : <DarkModeOutlined sx={{ fontSize: 18 }} />}
+      </IconButton>
+    </Tooltip>
   )
 }
 
@@ -130,10 +150,10 @@ export function LanguageToggle() {
       onChange={(_, v) => v && setLocale(v)}
       aria-label={t('common.language')}
     >
-      <ToggleButton value="fr" sx={{ px: 1.5, fontWeight: 600 }} lang="fr">
+      <ToggleButton value="fr" sx={{ px: 1.25, py: 0.5, fontWeight: 500 }} lang="fr">
         FR
       </ToggleButton>
-      <ToggleButton value="ar" sx={{ px: 1.5, fontWeight: 600 }} lang="ar">
+      <ToggleButton value="ar" sx={{ px: 1.25, py: 0.5, fontWeight: 500 }} lang="ar">
         عربي
       </ToggleButton>
     </ToggleButtonGroup>
@@ -151,8 +171,9 @@ function Sidebar({ onNavigate }: { onNavigate: () => void }) {
       sx={{
         height: '100%',
         bgcolor: tokens.sidebar,
-        px: 1.75,
-        py: 2.25,
+        borderInlineEnd: `1px solid ${tokens.line}`,
+        px: 1.25,
+        py: 1.5,
         display: 'flex',
         flexDirection: 'column',
         overflowY: 'auto',
@@ -174,17 +195,19 @@ function Sidebar({ onNavigate }: { onNavigate: () => void }) {
               sx={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 1.4,
-                minHeight: 40,
-                px: 1.4,
-                borderRadius: '10px',
+                gap: 1.25,
+                minHeight: 32,
+                px: 1,
+                borderRadius: '7px',
                 fontSize: 13.5,
                 textDecoration: 'none',
                 color: on ? tokens.ink : tokens.sidebarInk,
-                bgcolor: on ? '#FFFFFF' : 'transparent',
-                fontWeight: on ? 600 : 400,
-                '&:hover': { bgcolor: on ? '#FFFFFF' : 'rgba(255,255,255,0.08)' },
-                '& svg': { fontSize: 18, opacity: 0.9 },
+                bgcolor: on ? tokens.sidebarActive : 'transparent',
+                boxShadow: on ? tokens.shadowSm : 'none',
+                fontWeight: on ? 500 : 400,
+                transition: 'background-color 100ms, color 100ms',
+                '&:hover': { bgcolor: on ? tokens.sidebarActive : tokens.sidebarHover, color: tokens.ink },
+                '& svg': { fontSize: 17, color: on ? tokens.accent : tokens.sidebarMuted },
                 '&:focus-visible': { outline: `2px solid ${tokens.accentLine}`, outlineOffset: 2 },
               }}
             >
@@ -236,22 +259,21 @@ function UserCard() {
         <Button
           onClick={(e) => setAnchor(e.currentTarget)}
           sx={{
-            mt: 1.75,
+            mt: 1.5,
             justifyContent: 'flex-start',
             gap: 1.25,
-            p: 1,
-            borderRadius: '11px',
-            bgcolor: 'rgba(255,255,255,0.06)',
-            color: tokens.paper,
+            p: 0.75,
+            borderRadius: '8px',
+            color: tokens.ink,
             textAlign: 'start',
-            '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
+            '&:hover': { bgcolor: tokens.sidebarHover },
           }}
         >
-          <Avatar sx={{ width: 30, height: 30, bgcolor: tokens.accentSoft, color: tokens.accentDark, fontSize: 11.5, fontWeight: 700 }}>
+          <Avatar sx={{ width: 28, height: 28, bgcolor: tokens.accentSoft, color: tokens.accentDark, fontSize: 11, fontWeight: 600 }}>
             {initials}
           </Avatar>
           <Box sx={{ minWidth: 0 }}>
-            <Typography noWrap dir="auto" sx={{ fontSize: 12.5, fontWeight: 600 }}>
+            <Typography noWrap dir="auto" sx={{ fontSize: 13, fontWeight: 500 }}>
               {ctx.user.full_name}
             </Typography>
             <Typography noWrap sx={{ fontSize: 11, color: tokens.sidebarMuted }}>

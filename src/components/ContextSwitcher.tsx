@@ -59,40 +59,41 @@ export function ContextSwitcher() {
           alignItems: 'center',
           gap: 1.25,
           p: 0.75,
-          mb: 2.25,
-          borderRadius: '12px',
+          mb: 1.5,
+          borderRadius: '8px',
           textAlign: 'start',
-          '&:hover': { bgcolor: 'rgba(255,255,255,0.06)' },
+          '&:hover': { bgcolor: tokens.sidebarHover },
           '&:focus-visible': { outline: `2px solid ${tokens.accentLine}` },
         }}
       >
         <Box
           sx={{
-            width: 32,
-            height: 32,
-            borderRadius: '10px',
-            bgcolor: tokens.accent,
+            width: 26,
+            height: 26,
+            borderRadius: '7px',
+            background: `linear-gradient(135deg, ${tokens.accent}, ${tokens.infoInk})`,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25)',
             color: '#fff',
             display: 'grid',
             placeItems: 'center',
             fontFamily: tokens.display,
             fontWeight: 600,
-            fontSize: 17,
+            fontSize: 13,
             flexShrink: 0,
           }}
         >
           {ctx.school.name.charAt(0).toUpperCase()}
         </Box>
         <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography noWrap dir="auto" sx={{ fontSize: 13, fontWeight: 600, color: tokens.paper }}>
+          <Typography noWrap dir="auto" sx={{ fontSize: 13.5, fontWeight: 600, color: tokens.ink, letterSpacing: '-0.01em' }}>
             {ctx.school.name}
           </Typography>
-          <Typography noWrap sx={{ fontSize: 11, color: viewingPast ? '#E7CFA4' : tokens.sidebarMuted }}>
+          <Typography noWrap sx={{ fontSize: 11, color: viewingPast ? tokens.warnInk : tokens.sidebarMuted }}>
             {ctx.year ? t('shell.year', { name: ctx.year.name }) : t('shell.noYear')}
             {viewingPast ? ` · ${t('switcher.notCurrent')}` : ''}
           </Typography>
         </Box>
-        <UnfoldMoreOutlined sx={{ fontSize: 18, color: tokens.sidebarMuted }} />
+        <UnfoldMoreOutlined sx={{ fontSize: 16, color: tokens.sidebarMuted }} />
       </ButtonBase>
 
       <Menu

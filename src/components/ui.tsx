@@ -7,11 +7,11 @@ export function SectionTitle({ children, aside }: { children: React.ReactNode; a
     <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center', mt: 3.25, mb: 1.5 }}>
       <Typography
         component="h2"
-        sx={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: tokens.inkMuted }}
+        sx={{ fontSize: 12, fontWeight: 500, letterSpacing: '0.02em', color: tokens.inkMuted }}
       >
         {children}
       </Typography>
-      <Box sx={{ flex: 1, height: '1px', bgcolor: tokens.line }} />
+      <Box sx={{ flex: 1, height: '1px', bgcolor: tokens.lineSoft }} />
       {aside}
     </Stack>
   )
@@ -37,7 +37,7 @@ export function PageIntro({
           {title}
         </Typography>
         {subtitle && (
-          <Typography sx={{ mt: 0.75, color: tokens.inkSoft, fontSize: 14.5 }}>{subtitle}</Typography>
+          <Typography sx={{ mt: 0.5, color: tokens.inkMuted, fontSize: 14 }}>{subtitle}</Typography>
         )}
       </Box>
       {actions && (
@@ -52,7 +52,7 @@ export function PageIntro({
 export function StatCard({ value, label, hint }: { value: React.ReactNode; label: string; hint?: string }) {
   return (
     <Paper variant="outlined" sx={{ flex: '1 1 160px', p: 2, minWidth: 0 }}>
-      <Typography sx={{ fontFamily: tokens.display, fontSize: 28, lineHeight: 1 }}>{value}</Typography>
+      <Typography sx={{ fontFamily: tokens.display, fontSize: 26, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1 }}>{value}</Typography>
       <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted, mt: 0.75 }}>{label}</Typography>
       {hint && <Typography sx={{ fontSize: 12, color: tokens.inkMuted }}>{hint}</Typography>}
     </Paper>
@@ -63,9 +63,9 @@ export type Tone = 'ok' | 'warn' | 'danger' | 'neutral' | 'info'
 const TONES: Record<Tone, { bg: string; bd: string; ink: string }> = {
   ok: { bg: tokens.accentSoft, bd: tokens.accentLine, ink: tokens.accentDark },
   warn: { bg: tokens.warnSoft, bd: tokens.warnLine, ink: tokens.warnInk },
-  danger: { bg: tokens.dangerSoft, bd: '#E8B9B0', ink: tokens.dangerInk },
-  neutral: { bg: '#FFFFFF', bd: tokens.lineStrong, ink: tokens.inkMuted },
-  info: { bg: '#F0EAF7', bd: '#DFD3EC', ink: '#57407A' },
+  danger: { bg: tokens.dangerSoft, bd: tokens.dangerLine, ink: tokens.dangerInk },
+  neutral: { bg: tokens.fill, bd: tokens.line, ink: tokens.inkSoft },
+  info: { bg: tokens.infoSoft, bd: tokens.infoLine, ink: tokens.infoInk },
 }
 
 export function Tag({ tone = 'neutral', ...props }: ChipProps & { tone?: Tone }) {
@@ -74,7 +74,7 @@ export function Tag({ tone = 'neutral', ...props }: ChipProps & { tone?: Tone })
     <Chip
       size="small"
       {...props}
-      sx={{ bgcolor: c.bg, border: `1px solid ${c.bd}`, color: c.ink, height: 22, fontSize: 11.5, ...props.sx }}
+      sx={{ bgcolor: c.bg, border: `1px solid ${c.bd}`, color: c.ink, height: 22, fontSize: 11.5, borderRadius: '6px', ...props.sx }}
     />
   )
 }

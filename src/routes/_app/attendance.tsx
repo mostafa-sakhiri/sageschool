@@ -36,7 +36,7 @@ import { subjectsQuery } from '#/features/structure/api'
 import { studentsQuery } from '#/features/students/api'
 import type { DaySession } from '#/features/timetable/api'
 import { useSchoolDays } from '#/features/timetable/RealWeek'
-import { tokens } from '#/theme/theme'
+import { subjectTokens, tokens } from '#/theme/theme'
 
 export const Route = createFileRoute('/_app/attendance')({ component: AttendancePage })
 
@@ -214,7 +214,7 @@ function RollCall() {
                     <TableRow key={s.id}>
                       <TableCell>
                         <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
-                          <Avatar sx={{ width: 28, height: 28, fontSize: 11, bgcolor: '#E7EEF7', color: '#2A4A6B' }}>{initials(fullName(s))}</Avatar>
+                          <Avatar sx={{ width: 28, height: 28, fontSize: 11, bgcolor: subjectTokens(0).bg, color: subjectTokens(0).ink }}>{initials(fullName(s))}</Avatar>
                           <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{fullName(s)}</Typography>
                         </Stack>
                       </TableCell>

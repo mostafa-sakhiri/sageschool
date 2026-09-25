@@ -246,13 +246,13 @@ export function Planner({
   const draggedTeacher =
     drag?.kind === 'new' ? drag.item.teacherId : dragged && (drag?.kind === 'resize' || (drag?.kind === 'move' && drag.moved)) ? (slotById(dragged)?.teacherId ?? null) : null
   const active = !!drag && (drag.kind === 'new' || drag.kind === 'resize' || drag.moved)
-  const verdictColor = (v: Verdict) => (v.level === 'bad' ? tokens.dangerInk : v.level === 'warn' ? '#9A5B12' : tokens.accent)
+  const verdictColor = (v: Verdict) => (v.level === 'bad' ? tokens.dangerInk : v.level === 'warn' ? tokens.warn : tokens.accent)
   const ghostItem =
     drag?.kind === 'new' ? { title: drag.item.title, color: drag.item.color } : dragged ? slotById(dragged) : null
 
   return (
     <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: '1fr 300px' }, alignItems: 'start' }}>
-      <Paper variant="outlined" sx={{ overflowX: 'auto', cursor: active ? (drag?.kind === 'resize' ? 'ns-resize' : 'grabbing') : undefined }}>
+      <Paper variant="outlined" sx={{ overflowX: 'auto', bgcolor: tokens.content, cursor: active ? (drag?.kind === 'resize' ? 'ns-resize' : 'grabbing') : undefined }}>
         <Box sx={{ display: 'grid', gridTemplateColumns: `52px repeat(${days.length}, minmax(130px, 1fr))`, minWidth: 52 + days.length * 130 }}>
           <Box sx={{ borderBottom: `1px solid ${tokens.line}` }} />
           {days.map((d) => (
@@ -278,7 +278,7 @@ export function Planner({
                     insetInline: 0,
                     top: (from - earliest) * SCALE,
                     height: (to - from) * SCALE,
-                    bgcolor: tokens.paper,
+                    bgcolor: tokens.card,
                     backgroundImage: `repeating-linear-gradient(135deg, transparent 0 6px, ${tokens.lineSoft} 6px 7px)`,
                     pointerEvents: 'none',
                   }}
@@ -313,7 +313,7 @@ export function Planner({
                         top: (toMin(b.start) - earliest) * SCALE,
                         height: Math.max(12, (toMin(b.end) - toMin(b.start)) * SCALE - 2),
                         borderRadius: '8px',
-                        bgcolor: b.kind === 'nap' ? '#EFEBF6' : b.kind === 'recess' ? '#FBF3E3' : '#F4F1EA',
+                        bgcolor: b.kind === 'nap' ? tokens.napBg : b.kind === 'recess' ? tokens.recessBg : tokens.fill,
                         border: `1px dashed ${tokens.line}`,
                         px: 0.75,
                         display: 'flex',
@@ -379,7 +379,7 @@ export function Planner({
                           cursor: s.pending ? 'progress' : active ? 'inherit' : 'grab',
                           opacity: lifted ? 0.35 : s.pending ? 0.6 : 1,
                           transition: 'box-shadow 120ms, opacity 120ms',
-                          '&:hover': { boxShadow: active ? undefined : '0 2px 8px rgba(28,26,22,0.14)' },
+                          '&:hover': { boxShadow: active ? undefined : tokens.shadowMd },
                           '&:focus-visible': { outline: `2px solid ${tokens.accent}`, outlineOffset: 1 },
                           // resize grips, visible on hover like Google Calendar
                           '&::before, &::after':
@@ -405,7 +405,7 @@ export function Planner({
                       bgcolor: ghost.verdict.level === 'bad' ? tokens.dangerSoft : ghostItem.color.bg,
                       color: ghostItem.color.ink,
                       border: `2px solid ${verdictColor(ghost.verdict)}`,
-                      boxShadow: '0 6px 18px rgba(28,26,22,0.22)',
+                      boxShadow: tokens.shadowLg,
                       p: 0.75,
                       overflow: 'hidden',
                       zIndex: 4,
@@ -450,8 +450,8 @@ export function Planner({
             top: pointer.y + 14,
             zIndex: 1600,
             pointerEvents: 'none',
-            bgcolor: tokens.ink,
-            color: '#fff',
+            bgcolor: tokens.inverse,
+            color: tokens.inverseInk,
             borderRadius: 1.5,
             px: 1,
             py: 0.5,

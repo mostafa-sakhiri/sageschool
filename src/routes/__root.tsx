@@ -1,11 +1,11 @@
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
 import type { QueryClient } from '@tanstack/react-query'
 import { CacheProvider } from '@emotion/react'
-import { CssBaseline, ThemeProvider } from '@mui/material'
+import { CssBaseline, InitColorSchemeScript, ThemeProvider } from '@mui/material'
 import { useMemo } from 'react'
 import { fetchLocale } from '#/lib/auth'
 import { I18nProvider, useI18n, type Locale } from '#/i18n/i18n'
-import { createAppTheme, emotionCaches } from '#/theme/theme'
+import { COLOR_SCHEME_ATTRIBUTE, createAppTheme, emotionCaches, tokenCss } from '#/theme/theme'
 import { ErrorState, NotFound } from '#/components/states'
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
@@ -21,9 +21,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+      { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: 'anonymous' },
       {
         rel: 'stylesheet',
-        href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap',
+        href: 'https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap',
       },
     ],
   }),
@@ -37,11 +38,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   const { initialLocale } = Route.useRouteContext()
   const locale = initialLocale ?? 'fr'
   return (
-    <html lang={locale} dir={locale === 'ar' ? 'rtl' : 'ltr'}>
+    <html lang={locale} dir={locale === 'ar' ? 'rtl' : 'ltr'} suppressHydrationWarning>
       <head>
         <HeadContent />
+        <style dangerouslySetInnerHTML={{ __html: tokenCss }} />
       </head>
-      <body style={{ margin: 0, background: '#F7F4EE' }}>
+      <body style={{ margin: 0, background: 'var(--ss-paper)' }}>
+        <InitColorSchemeScript attribute={COLOR_SCHEME_ATTRIBUTE} defaultMode="light" />
         {children}
         <Scripts />
       </body>
@@ -65,7 +68,7 @@ function Themed({ children }: { children: React.ReactNode }) {
   const theme = useMemo(() => createAppTheme(dir), [dir])
   return (
     <CacheProvider value={emotionCaches[dir]}>
-      <ThemeProvider theme={theme}>
+      <ThemeProvider theme={theme} defaultMode="light">
         <CssBaseline />
         {children}
       </ThemeProvider>
