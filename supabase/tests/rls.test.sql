@@ -16,7 +16,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(71);
+SELECT plan(75);
 
 -- Impersonate a user: JWT claims + the authenticated role (RESET ROLE first).
 CREATE FUNCTION pg_temp.login(p_email text) RETURNS void LANGUAGE plpgsql AS $$
@@ -416,6 +416,21 @@ SELECT ok((SELECT bool_and(sent_at IS NOT NULL AND sent_by_member_id = 'b1000000
   'outbox: sent_at and who sent it are recorded');
 SELECT pg_temp.login('pa@test.ma');
 SELECT is_empty($$UPDATE notification_outbox SET status = 'stubbed' RETURNING id$$, 'outbox: a parent cannot change a message');
+RESET ROLE;
+
+-- Announcements: the whole office edits and deletes, the author stays
+SELECT pg_temp.login('pa@test.ma');
+SELECT is_empty($$DELETE FROM announcements WHERE id = '73000000-0000-0000-0000-000000000004' RETURNING id$$,
+  'announcements: a parent cannot delete an announcement');
+RESET ROLE;
+SELECT pg_temp.login('staff.a@test.ma');
+SELECT lives_ok($$UPDATE announcements SET title = 'Corrigé', author_member_id = 'b1000000-0000-0000-0000-000000000002'
+                  WHERE id = '73000000-0000-0000-0000-000000000004'$$,
+  'announcements: staff corrects an announcement written by the admin');
+SELECT is((SELECT author_member_id FROM announcements WHERE id = '73000000-0000-0000-0000-000000000004'),
+  'b1000000-0000-0000-0000-000000000001'::uuid, 'announcements: the author does not change on edit');
+SELECT isnt_empty($$DELETE FROM announcements WHERE id = '73000000-0000-0000-0000-000000000004' RETURNING id$$,
+  'announcements: staff deletes an announcement');
 RESET ROLE;
 
 SELECT * FROM finish();
