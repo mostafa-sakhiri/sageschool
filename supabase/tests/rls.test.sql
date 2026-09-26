@@ -16,7 +16,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(67);
+SELECT plan(71);
 
 -- Impersonate a user: JWT claims + the authenticated role (RESET ROLE first).
 CREATE FUNCTION pg_temp.login(p_email text) RETURNS void LANGUAGE plpgsql AS $$
@@ -403,6 +403,19 @@ SELECT pg_temp.login('admin.b@test.ma');
 SELECT is((SELECT count(*) FROM student_alerts)::int + (SELECT count(*) FROM appointments)::int
           + (SELECT count(*) FROM preinscriptions)::int + (SELECT count(*) FROM payment_reminders)::int, 0,
   'cross-school: admin B reads none of school A''s alerts, appointments, pre-registrations, reminders');
+RESET ROLE;
+
+-- Outbox: the office ticks a message as sent (WhatsApp links); nothing else changes
+SELECT pg_temp.login('staff.a@test.ma');
+SELECT lives_ok($$UPDATE notification_outbox SET status = 'sent' WHERE kind = 'payment_reminder' AND school_id = '5c000000-0000-0000-0000-00000000000a'$$,
+  'outbox: staff marks a message as sent');
+SELECT throws_ok($$UPDATE notification_outbox SET body = 'autre texte' WHERE kind = 'payment_reminder' AND school_id = '5c000000-0000-0000-0000-00000000000a'$$,
+  '42501', NULL, 'outbox: staff cannot rewrite a message');
+RESET ROLE;
+SELECT ok((SELECT bool_and(sent_at IS NOT NULL AND sent_by_member_id = 'b1000000-0000-0000-0000-000000000002') FROM notification_outbox WHERE kind = 'payment_reminder' AND school_id = '5c000000-0000-0000-0000-00000000000a'),
+  'outbox: sent_at and who sent it are recorded');
+SELECT pg_temp.login('pa@test.ma');
+SELECT is_empty($$UPDATE notification_outbox SET status = 'stubbed' RETURNING id$$, 'outbox: a parent cannot change a message');
 RESET ROLE;
 
 SELECT * FROM finish();

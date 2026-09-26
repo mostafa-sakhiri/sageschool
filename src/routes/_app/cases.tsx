@@ -34,6 +34,7 @@ import { errorMessage, must } from '#/lib/errors'
 import { formatDateTime } from '#/lib/format'
 import { parentsQuery, studentsQuery } from '#/features/students/api'
 import { formatPhone } from '#/lib/format'
+import { WhatsAppButton } from '#/components/WhatsApp'
 import { tokens } from '#/theme/theme'
 import { CASE_TONE, casesQuery, type CaseRow } from '#/features/queries'
 
@@ -249,11 +250,20 @@ function Thread({ c }: { c: CaseRow }) {
             minRows={2}
           />
           {ctx.isOffice && <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted }}>{t('cases.whatsappStub')}</Typography>}
-          <Box>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Button type="submit" variant="contained" loading={reply.isPending} disabled={!body.trim()}>
               {t('cases.send')}
             </Button>
-          </Box>
+            {ctx.isOffice && body.trim() && (
+              <WhatsAppButton
+                phone={c.parent?.user?.phone}
+                label={t('wa.sendAlso')}
+                tooltip={t('wa.caseTooltip')}
+                text={t('wa.caseReply', { subject: c.subject, body: body.trim(), school: ctx.school.name })}
+                onSent={() => reply.mutate()}
+              />
+            )}
+          </Stack>
           {(reply.isError || resolve.isError) && <Alert severity="error">{errorMessage(reply.error ?? resolve.error, t)}</Alert>}
         </Stack>
       )}

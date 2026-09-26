@@ -41,6 +41,7 @@ import { useSchoolDays } from '#/features/timetable/RealWeek'
 import { subjectTokens, tokens } from '#/theme/theme'
 import { AlertsPanel } from '#/features/attendance/Alerts'
 import { ParentNotified } from '#/features/attendance/ParentNotified'
+import { guardiansToRecipients } from '#/components/WhatsApp'
 import { StaffPresencePanel } from '#/features/attendance/StaffPresence'
 import { alertsQuery } from '#/features/attendance/api'
 
@@ -108,6 +109,7 @@ function RollCall({ embedded }: { embedded?: boolean }) {
   const [slotKey, setSlotKey] = useState<string>('day')
   const [marks, setMarks] = useState<Record<string, Status>>({})
   const [saved, setSaved] = useState(false)
+  const allStudents = useQuery({ ...studentsQuery(ctx.school.id), enabled: ctx.isOffice })
 
   useEffect(() => {
     if (!classId && classes.data?.length) setClassId(classes.data[0].id)
@@ -276,7 +278,14 @@ function RollCall({ embedded }: { embedded?: boolean }) {
                           const rec = existing.data?.find((r) => r.student_id === s.id && (r.status === 'absent' || r.status === 'late'))
                           return rec ? (
                             <span style={{ marginInlineEnd: 12 }}>
-                              <ParentNotified recordId={rec.id} notifiedAt={rec.parent_notified_at} />
+                              <ParentNotified
+                                recordId={rec.id}
+                                notifiedAt={rec.parent_notified_at}
+                                parents={guardiansToRecipients(allStudents.data?.find((x) => x.id === s.id)?.guardians ?? [])}
+                                child={fullName(s)}
+                                date={date}
+                                status={rec.status}
+                              />
                             </span>
                           ) : null
                         })()}

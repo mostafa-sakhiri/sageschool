@@ -29,6 +29,7 @@ import { formatPhone, hhmm, nowTime, todayIso, toMinutes } from '#/lib/format'
 import { membersQuery } from '#/features/team/api'
 import type { TeacherSession } from '#/features/timetable/api'
 import { tokens } from '#/theme/theme'
+import { WhatsAppButton } from '#/components/WhatsApp'
 
 // Minutes of grace before an arrival counts as late (or a departure as early)
 const GRACE = 5
@@ -250,6 +251,9 @@ function PresenceRow({
               </Typography>
             )}
           </div>
+          {phone && !arrived && !absent && expected?.count ? (
+            <WhatsAppButton phone={phone} text={t('wa.teacherLate', { name, time: expected.start ?? '' })} tooltip={t('wa.teacherLateTooltip')} />
+          ) : null}
         </Stack>
       </TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap', color: tokens.inkSoft }}>

@@ -33,6 +33,7 @@ import { formatDate, formatDateTime, formatMoney, formatPhone, todayIso } from '
 import { nodeLabel, nodesQuery } from '#/features/structure/api'
 import { classesQuery } from '#/features/classes/api'
 import { currentEnrollment, studentsQuery, type Guardian } from '#/features/students/api'
+import { WhatsAppButton } from '#/components/WhatsApp'
 import { tokens } from '#/theme/theme'
 import { balancesQuery, type Balance } from '#/features/queries'
 
@@ -442,8 +443,8 @@ function ReminderDialog({
       ) as unknown as { id: string; channel: string; note: string | null; created_at: string; by: { user: { full_name: string } | null } | null }[],
   })
   const save = useMutation({
-    mutationFn: async () =>
-      must(await supabase.from('payment_reminders').insert({ school_id: ctx.school.id, installment_id: balance.id, channel, note: note.trim() || null })),
+    mutationFn: async (via?: typeof channel) =>
+      must(await supabase.from('payment_reminders').insert({ school_id: ctx.school.id, installment_id: balance.id, channel: via ?? channel, note: note.trim() || null })),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'reminders'] })
       await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'reminders-of', balance.id] })
@@ -463,14 +464,30 @@ function ReminderDialog({
           <Box>
             {shown.length === 0 && <Alert severity="warning">{t('students.noParent')}</Alert>}
             {shown.map((g) => (
-              <Typography key={g.guardian_member_id} sx={{ fontSize: 14 }}>
-                {g.member?.user?.full_name}
-                {g.member?.user?.phone && (
-                  <Box component="a" href={`tel:${g.member.user.phone}`} dir="ltr" sx={{ ml: 1, color: tokens.accentDark, fontWeight: 600 }}>
-                    {formatPhone(g.member.user.phone)}
-                  </Box>
-                )}
-              </Typography>
+              <Stack key={g.guardian_member_id} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Typography sx={{ fontSize: 14, flex: 1 }}>
+                  {g.member?.user?.full_name}
+                  {g.member?.user?.phone && (
+                    <Box component="a" href={`tel:${g.member.user.phone}`} dir="ltr" sx={{ ml: 1, color: tokens.accentDark, fontWeight: 600 }}>
+                      {formatPhone(g.member.user.phone)}
+                    </Box>
+                  )}
+                </Typography>
+                <WhatsAppButton
+                  phone={g.member?.user?.phone}
+                  label={t('wa.sendReminder')}
+                  tooltip={t('wa.reminderTooltip')}
+                  text={t('wa.payment', {
+                    parent: g.member?.user?.full_name ?? '',
+                    child: studentName,
+                    label: balance.label,
+                    amount: formatMoney(balance.amount_remaining, locale),
+                    date: formatDate(balance.due_on, locale),
+                    school: ctx.school.name,
+                  })}
+                  onSent={() => save.mutate('whatsapp')}
+                />
+              </Stack>
             ))}
           </Box>
           <TextField select label={t('fees.remindChannel')} value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)}>
@@ -502,7 +519,7 @@ function ReminderDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t('common.cancel')}</Button>
-        <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending}>
+        <Button variant="contained" onClick={() => save.mutate(undefined)} loading={save.isPending}>
           {t('fees.remindSave')}
         </Button>
       </DialogActions>

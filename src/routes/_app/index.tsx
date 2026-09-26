@@ -2,9 +2,12 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Avatar, Box, Button, Paper, Stack, Typography } from '@mui/material'
 import WarningAmberOutlined from '@mui/icons-material/WarningAmberOutlined'
+import ErrorOutlineOutlined from '@mui/icons-material/ErrorOutlineOutlined'
+import EventOutlined from '@mui/icons-material/EventOutlined'
+import ChecklistOutlined from '@mui/icons-material/ChecklistOutlined'
 import CheckOutlined from '@mui/icons-material/CheckOutlined'
 import { AppShell } from '#/components/AppShell'
-import { Card, PageIntro, SectionTitle, StatCard, Tag, fullName, initials } from '#/components/ui'
+import { Card, PageIntro, SectionTitle, StatCard, Tag, fullName, initials, type Tone } from '#/components/ui'
 import { ErrorState, Loading } from '#/components/states'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
@@ -20,6 +23,7 @@ import { membersNamesQuery, subjectColor, type DaySession, type TeacherSession }
 import { announcementsQuery, balancesQuery, casesQuery, homeworkQuery } from '#/features/queries'
 import { subjectTokens, tokens } from '#/theme/theme'
 import { ParentNotified } from '#/features/attendance/ParentNotified'
+import { guardiansToRecipients } from '#/components/WhatsApp'
 
 export const Route = createFileRoute('/_app/')({ component: Dashboard })
 
@@ -38,7 +42,20 @@ function Dashboard() {
   )
 }
 
-type Todo = { key: string; title: string; detail?: string; to: string; search?: Record<string, string>; action: string; urgent?: boolean }
+// Urgency of a to-do, most urgent first:
+//   critical: a family is waiting (alert to notify, unanswered message, complaint)
+//   high: money or enrolment at stake, or setup that blocks the school
+//   info: planned for today
+//   low: housekeeping
+type Level = 'critical' | 'high' | 'info' | 'low'
+type Todo = { key: string; title: string; detail?: string; to: string; search?: Record<string, string>; action: string; level: Level }
+
+const LEVELS: Record<Level, { order: number; bg: string; line: string; bar: string; iconBg: string; ink: string; icon: React.ReactNode; tone: Tone }> = {
+  critical: { order: 0, bg: tokens.dangerSoft, line: tokens.dangerLine, bar: tokens.dangerInk, iconBg: tokens.dangerLine, ink: tokens.dangerInk, icon: <ErrorOutlineOutlined fontSize="small" />, tone: 'danger' },
+  high: { order: 1, bg: tokens.warnSoft, line: tokens.warnLine, bar: tokens.warn, iconBg: tokens.warnLine, ink: tokens.warnInk, icon: <WarningAmberOutlined fontSize="small" />, tone: 'warn' },
+  info: { order: 2, bg: tokens.infoSoft, line: tokens.infoLine, bar: tokens.infoInk, iconBg: tokens.infoLine, ink: tokens.infoInk, icon: <EventOutlined fontSize="small" />, tone: 'info' },
+  low: { order: 3, bg: tokens.card, line: tokens.line, bar: tokens.lineStrong, iconBg: tokens.fill, ink: tokens.inkMuted, icon: <ChecklistOutlined fontSize="small" />, tone: 'neutral' },
+}
 
 function TodoList({ items }: { items: Todo[] }) {
   const { t } = useI18n()
@@ -49,34 +66,47 @@ function TodoList({ items }: { items: Todo[] }) {
         <Typography sx={{ color: tokens.accentDark }}>{t('dash.nothing')}</Typography>
       </Paper>
     )
+  const sorted = [...items].sort((a, b) => LEVELS[a.level].order - LEVELS[b.level].order)
   return (
     <Stack spacing={1}>
-      {items.map((a) => (
-        <Paper
-          key={a.key}
-          variant="outlined"
-          sx={{
-            p: 2,
-            display: 'flex',
-            gap: 1.75,
-            alignItems: 'center',
-            flexWrap: { xs: 'wrap', sm: 'nowrap' },
-            bgcolor: a.urgent ? tokens.cardWarm : tokens.card,
-            borderColor: a.urgent ? tokens.warnLine : tokens.lineSoft,
-          }}
-        >
-          <Box sx={{ width: 34, height: 34, borderRadius: '10px', display: 'grid', placeItems: 'center', bgcolor: a.urgent ? tokens.warnSoft : tokens.fill, color: a.urgent ? tokens.warn : tokens.inkMuted, flexShrink: 0 }}>
-            <WarningAmberOutlined fontSize="small" />
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontWeight: 600, fontSize: 15 }}>{a.title}</Typography>
-            {a.detail && <Typography sx={{ fontSize: 13, color: tokens.inkSoft }}>{a.detail}</Typography>}
-          </Box>
-          <Button component={Link} to={a.to} search={a.search as never} variant={a.urgent ? 'contained' : 'outlined'} size="small">
-            {a.action}
-          </Button>
-        </Paper>
-      ))}
+      {sorted.map((a) => {
+        const l = LEVELS[a.level]
+        return (
+          <Paper
+            key={a.key}
+            variant="outlined"
+            sx={{
+              p: 2,
+              display: 'flex',
+              gap: 1.75,
+              alignItems: 'center',
+              flexWrap: { xs: 'wrap', sm: 'nowrap' },
+              bgcolor: l.bg,
+              borderColor: l.line,
+              borderInlineStart: `3px solid ${l.bar}`,
+            }}
+          >
+            <Box sx={{ width: 34, height: 34, borderRadius: '10px', display: 'grid', placeItems: 'center', bgcolor: l.iconBg, color: l.ink, flexShrink: 0 }}>{l.icon}</Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Typography sx={{ fontWeight: 600, fontSize: 15 }}>{a.title}</Typography>
+                {a.level !== 'low' && <Tag tone={l.tone} label={t(`dash.level.${a.level}`)} />}
+              </Stack>
+              {a.detail && <Typography sx={{ fontSize: 13, color: tokens.inkSoft }}>{a.detail}</Typography>}
+            </Box>
+            <Button
+              component={Link}
+              to={a.to}
+              search={a.search as never}
+              variant={a.level === 'critical' || a.level === 'high' ? 'contained' : 'outlined'}
+              color={a.level === 'critical' ? 'error' : a.level === 'high' ? 'warning' : 'primary'}
+              size="small"
+            >
+              {a.action}
+            </Button>
+          </Paper>
+        )
+      })}
     </Stack>
   )
 }
@@ -124,16 +154,16 @@ function OfficeDash() {
       must(
         await supabase
           .from('attendance_records')
-          .select('id, status, justification, parent_notified_at, student:students(first_name, last_name), class:classes(name)')
+          .select('id, student_id, session_date, status, justification, parent_notified_at, student:students(first_name, last_name), class:classes(name)')
           .eq('school_id', ctx.school.id)
           .eq('session_date', today)
           .neq('status', 'present'),
-      ) as unknown as { id: string; status: string; parent_notified_at: string | null; student: { first_name: string; last_name: string }; class: { name: string } }[],
+      ) as unknown as { id: string; student_id: string; session_date: string; status: string; parent_notified_at: string | null; student: { first_name: string; last_name: string }; class: { name: string } }[],
   })
 
   if (!ctx.year)
     return (
-      <TodoList items={[{ key: 'year', title: t('year.none'), detail: t('year.noneHint'), to: '/setup', action: t('dash.createYear'), urgent: true }]} />
+      <TodoList items={[{ key: 'year', title: t('year.none'), detail: t('year.noneHint'), to: '/setup', action: t('dash.createYear'), level: 'high' as const }]} />
     )
   if (students.isPending || classes.isPending) return <Loading rows={5} />
   if (students.isError || classes.isError) return <ErrorState error={students.error ?? classes.error} onRetry={() => (students.refetch(), classes.refetch())} />
@@ -156,24 +186,24 @@ function OfficeDash() {
   const nameOf = (id: string) => fullName(studentRows.find((s) => s.id === id))
   const todos: Todo[] = [
     ...(openAlerts.length
-      ? [{ key: 'alerts', title: t('dash.openAlerts', { n: openAlerts.length }), detail: openAlerts.slice(0, 3).map((a) => nameOf(a.student_id)).join(', '), to: '/attendance', search: { tab: 'alerts' }, action: t('dash.notifyParents'), urgent: true }]
+      ? [{ key: 'alerts', title: t('dash.openAlerts', { n: openAlerts.length }), detail: openAlerts.slice(0, 3).map((a) => nameOf(a.student_id)).join(', '), to: '/attendance', search: { tab: 'alerts' }, action: t('dash.notifyParents'), level: 'critical' as const }]
       : []),
     ...(ctx.isAdmin && forAdmin.length
-      ? [{ key: 'forAdmin', title: t('dash.complaintsForAdmin', { n: forAdmin.length }), detail: forAdmin[0].subject, to: '/cases', action: t('dash.answer'), urgent: true }]
+      ? [{ key: 'forAdmin', title: t('dash.complaintsForAdmin', { n: forAdmin.length }), detail: forAdmin[0].subject, to: '/cases', action: t('dash.answer'), level: 'critical' as const }]
       : []),
     ...((appointments.data ?? []).length
-      ? [{ key: 'agenda', title: t('dash.appointmentsToday', { n: appointments.data!.length }), detail: appointments.data!.slice(0, 3).map((a) => `${new Date(a.starts_at).toTimeString().slice(0, 5)} ${a.title}`).join(' · '), to: '/agenda', action: t('dash.seeAgenda') }]
+      ? [{ key: 'agenda', title: t('dash.appointmentsToday', { n: appointments.data!.length }), detail: appointments.data!.slice(0, 3).map((a) => `${new Date(a.starts_at).toTimeString().slice(0, 5)} ${a.title}`).join(' · '), to: '/agenda', action: t('dash.seeAgenda'), level: 'info' as const }]
       : []),
     ...(dueFollowups.length
-      ? [{ key: 'prereg', title: t('dash.followupsDue', { n: dueFollowups.length }), detail: dueFollowups.slice(0, 3).map((p) => `${p.child_first_name} ${p.child_last_name}`).join(', '), to: '/preregistrations', action: t('dash.followUp') }]
+      ? [{ key: 'prereg', title: t('dash.followupsDue', { n: dueFollowups.length }), detail: dueFollowups.slice(0, 3).map((p) => `${p.child_first_name} ${p.child_last_name}`).join(', '), to: '/preregistrations', action: t('dash.followUp'), level: 'high' as const }]
       : []),
-    ...(openCases.length ? [{ key: 'cases', title: t('dash.openCases', { n: openCases.length }), detail: openCases[0].subject, to: '/cases', action: t('dash.answer'), urgent: true }] : []),
-    ...(classRows.length === 0 ? [{ key: 'classes', title: t('dash.noClasses'), to: '/classes', action: t('dash.createClasses'), urgent: true }] : []),
+    ...(openCases.length ? [{ key: 'cases', title: t('dash.openCases', { n: openCases.length }), detail: openCases[0].subject, to: '/cases', action: t('dash.answer'), level: 'critical' as const }] : []),
+    ...(classRows.length === 0 ? [{ key: 'classes', title: t('dash.noClasses'), to: '/classes', action: t('dash.createClasses'), level: 'high' as const }] : []),
     ...(noTimetable.length && classRows.length
-      ? [{ key: 'tt', title: t('dash.noTimetable', { n: noTimetable.length, total: classRows.length }), detail: noTimetable.slice(0, 3).map((c) => c.name).join(', '), to: '/timetable', action: t('common.continue') }]
+      ? [{ key: 'tt', title: t('dash.noTimetable', { n: noTimetable.length, total: classRows.length }), detail: noTimetable.slice(0, 3).map((c) => c.name).join(', '), to: '/timetable', action: t('common.continue'), level: 'low' as const }]
       : []),
-    ...(unplaced.length ? [{ key: 'unplaced', title: t('dash.unplaced', { n: unplaced.length }), detail: unplaced.slice(0, 2).map((s) => fullName(s)).join(', '), to: '/students', action: t('dash.place') }] : []),
-    ...(noParent.length ? [{ key: 'parents', title: t('dash.noParent', { n: noParent.length }), to: '/students', action: t('dash.link') }] : []),
+    ...(unplaced.length ? [{ key: 'unplaced', title: t('dash.unplaced', { n: unplaced.length }), detail: unplaced.slice(0, 2).map((s) => fullName(s)).join(', '), to: '/students', action: t('dash.place'), level: 'high' as const }] : []),
+    ...(noParent.length ? [{ key: 'parents', title: t('dash.noParent', { n: noParent.length }), to: '/students', action: t('dash.link'), level: 'low' as const }] : []),
     ...(overdue.length
       ? [
           {
@@ -182,6 +212,7 @@ function OfficeDash() {
             detail: `${formatMoney(overdue.reduce((s, b) => s + Number(b.amount_remaining), 0), locale)}${notReminded.length ? ` · ${t('dash.notReminded', { n: notReminded.length })}` : ''}`,
             to: '/fees',
             action: t('dash.seeFees'),
+            level: 'high' as const,
           },
         ]
       : []),
@@ -197,7 +228,18 @@ function OfficeDash() {
         <StatCard value={publishedCount} label={t('dash.publishedTimetables')} />
         <StatCard value={absentCount} label={t('dash.absentToday')} />
       </Stack>
-      <SectionTitle aside={<Tag tone="warn" label={todos.length} />}>{t('dash.todo')}</SectionTitle>
+      <SectionTitle
+        aside={
+          <Stack direction="row" spacing={0.5}>
+            {(['critical', 'high', 'info', 'low'] as const).map((lv) => {
+              const n = todos.filter((x) => x.level === lv).length
+              return n ? <Tag key={lv} tone={LEVELS[lv].tone} label={n} /> : null
+            })}
+          </Stack>
+        }
+      >
+        {t('dash.todo')}
+      </SectionTitle>
       <TodoList items={todos} />
       <SectionTitle>{t('dash.absencesToday')}</SectionTitle>
       <Card>
@@ -212,7 +254,16 @@ function OfficeDash() {
                   {fullName(a.student)} <span style={{ color: tokens.inkMuted }}>· {a.class?.name}</span>
                 </Typography>
                 <Tag tone={a.status === 'absent' ? 'danger' : a.status === 'late' ? 'warn' : 'info'} label={t(`att.status.${a.status}`)} />
-                {(a.status === 'absent' || a.status === 'late') && <ParentNotified recordId={a.id} notifiedAt={a.parent_notified_at} />}
+                {(a.status === 'absent' || a.status === 'late') && (
+                  <ParentNotified
+                    recordId={a.id}
+                    notifiedAt={a.parent_notified_at}
+                    parents={guardiansToRecipients(studentRows.find((s) => s.id === a.student_id)?.guardians ?? [])}
+                    child={fullName(a.student)}
+                    date={a.session_date}
+                    status={a.status}
+                  />
+                )}
               </Stack>
             ))}
           </Stack>

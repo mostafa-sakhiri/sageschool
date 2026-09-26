@@ -20,6 +20,8 @@ import {
   Typography,
 } from '@mui/material'
 import CampaignOutlined from '@mui/icons-material/CampaignOutlined'
+import WhatsAppIcon from '@mui/icons-material/WhatsApp'
+import { WhatsAppBroadcast } from '#/features/announcements/WhatsAppBroadcast'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, Tag } from '#/components/ui'
 import { EmptyState, QueryState } from '#/components/states'
@@ -53,14 +55,21 @@ function AnnouncementsPage() {
     enabled: ctx.isOffice,
     queryFn: async () => {
       const rows = must(
-        await supabase.from('notification_outbox').select('ref_id').eq('school_id', ctx.school.id).eq('kind', 'announcement'),
+        await supabase.from('notification_outbox').select('ref_id, status').eq('school_id', ctx.school.id).eq('kind', 'announcement'),
       )
-      const m: Record<string, number> = {}
-      for (const r of rows) if (r.ref_id) m[r.ref_id] = (m[r.ref_id] ?? 0) + 1
+      const m: Record<string, { total: number; sent: number }> = {}
+      for (const r of rows)
+        if (r.ref_id) {
+          m[r.ref_id] ??= { total: 0, sent: 0 }
+          m[r.ref_id].total++
+          if (r.status === 'sent') m[r.ref_id].sent++
+        }
       return m
     },
   })
   const [open, setOpen] = useState(false)
+  const [broadcastId, setBroadcastId] = useState<string | null>(null)
+  const broadcast = (list.data ?? []).find((a) => a.id === broadcastId)
   const { new: openNew } = Route.useSearch()
   const navigateSelf = Route.useNavigate()
   useEffect(() => {
@@ -121,10 +130,21 @@ function AnnouncementsPage() {
                     ))}
                     {a.status === 'published' && (
                       <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted }}>
-                        {t('ann.reached', { n: reach.data?.[a.id] ?? 0 })}
+                        {t('ann.reached', { n: reach.data?.[a.id]?.total ?? 0 })}
                       </Typography>
                     )}
-                    {a.status === 'draft' && <PublishButton id={a.id} />}
+                    {a.status === 'published' && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<WhatsAppIcon sx={{ color: '#25D366' }} />}
+                        onClick={() => setBroadcastId(a.id)}
+                        sx={{ marginInlineStart: 'auto' }}
+                      >
+                        {t('bc.button', { sent: reach.data?.[a.id]?.sent ?? 0, total: reach.data?.[a.id]?.total ?? 0 })}
+                      </Button>
+                    )}
+                    {a.status === 'draft' && <PublishButton id={a.id} onPublished={setBroadcastId} />}
                   </Stack>
                 )}
               </Paper>
@@ -132,18 +152,30 @@ function AnnouncementsPage() {
           </Stack>
         )}
       </QueryState>
-      {open && <NewAnnouncement onClose={() => setOpen(false)} />}
+      {open && <NewAnnouncement onClose={() => setOpen(false)} onPublished={setBroadcastId} />}
+      {broadcast && (
+        <WhatsAppBroadcast
+          announcement={broadcast}
+          onClose={() => {
+            setBroadcastId(null)
+            void reach.refetch()
+          }}
+        />
+      )}
     </AppShell>
   )
 }
 
-function PublishButton({ id }: { id: string }) {
+function PublishButton({ id, onPublished }: { id: string; onPublished: (id: string) => void }) {
   const { t } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
   const publish = useMutation({
     mutationFn: async () => must(await supabase.rpc('publish_announcement', { p_announcement_id: id })),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id] }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id] })
+      onPublished(id)
+    },
   })
   return (
     <Button size="small" variant="contained" onClick={() => publish.mutate()} loading={publish.isPending} sx={{ marginInlineStart: 'auto' }}>
@@ -152,7 +184,7 @@ function PublishButton({ id }: { id: string }) {
   )
 }
 
-function NewAnnouncement({ onClose }: { onClose: () => void }) {
+function NewAnnouncement({ onClose, onPublished }: { onClose: () => void; onPublished: (id: string) => void }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
@@ -185,12 +217,14 @@ function NewAnnouncement({ onClose }: { onClose: () => void }) {
             : []
       if (targets.length) must(await supabase.from('announcement_targets').insert(targets))
       // Publishing stubs one WhatsApp message per reached parent (outbox).
-      if (publish) return must(await supabase.rpc('publish_announcement', { p_announcement_id: a.id })) as number
-      return null
+      if (publish) must(await supabase.rpc('publish_announcement', { p_announcement_id: a.id }))
+      return publish ? a.id : null
     },
-    onSuccess: async () => {
+    onSuccess: async (id) => {
       await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id] })
       onClose()
+      // Published: straight to sending it on WhatsApp
+      if (id) onPublished(id)
     },
   })
   const targetsOk = scope === 'school' || (scope === 'classes' ? classIds.length > 0 : nodeIds.length > 0)

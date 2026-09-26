@@ -1272,6 +1272,8 @@ export type Database = {
           recipient_user_id: string | null
           ref_id: string | null
           school_id: string
+          sent_at: string | null
+          sent_by_member_id: string | null
           status: string
         }
         Insert: {
@@ -1283,6 +1285,8 @@ export type Database = {
           recipient_user_id?: string | null
           ref_id?: string | null
           school_id: string
+          sent_at?: string | null
+          sent_by_member_id?: string | null
           status?: string
         }
         Update: {
@@ -1294,6 +1298,8 @@ export type Database = {
           recipient_user_id?: string | null
           ref_id?: string | null
           school_id?: string
+          sent_at?: string | null
+          sent_by_member_id?: string | null
           status?: string
         }
         Relationships: [
@@ -1309,6 +1315,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_outbox_sent_by_member_id_fkey"
+            columns: ["sent_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "school_members"
             referencedColumns: ["id"]
           },
         ]

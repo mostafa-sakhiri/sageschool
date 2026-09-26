@@ -43,6 +43,7 @@ import { currentEnrollment, parentsQuery, studentsQuery, type StudentRow } from 
 import { InviteDialog } from '#/features/team/InviteDialog'
 import { ContactDialog, type ContactTarget } from '#/features/team/ContactDialog'
 import { formatPhone } from '#/lib/format'
+import { WhatsAppButton } from '#/components/WhatsApp'
 import { AddStudentDialog } from '#/features/students/AddStudentDialog'
 import { ImportDialog } from '#/features/import/ImportZone'
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
@@ -383,6 +384,7 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
           </Box>
           {g.relationship && <Tag label={t(`students.rel.${g.relationship}`)} />}
           {g.is_payer && <Tag tone="info" label={t('students.payer')} />}
+          <WhatsAppButton phone={g.member?.user?.phone} text={t('wa.aboutChild', { name: g.member?.user?.full_name ?? '', child: student.first_name, school: ctx.school.name })} />
           {g.member?.user && (
             <IconButton
               size="small"
@@ -518,6 +520,7 @@ function ParentsTab({ onOpenStudent }: { onOpenStudent: (id: string) => void }) 
                       <TableCell dir="ltr" sx={{ textAlign: 'start', whiteSpace: 'nowrap' }}>
                         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
                           <span>{formatPhone(p.user?.phone) || '—'}</span>
+                          <WhatsAppButton phone={p.user?.phone} text={t('wa.hello', { name: p.user?.full_name ?? '', school: ctx.school.name })} />
                           {p.user && (
                             <IconButton
                               size="small"

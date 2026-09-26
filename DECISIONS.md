@@ -129,3 +129,13 @@ Additive migrations `20260926090000_office_followup.sql` and `20260926090100_sta
 - **Late payments:** "updating the status" is a new displayed state, "en retard · relancé le … (n×)", computed from `payment_reminders`. The payment status itself stays computed by `installment_balances` (D-012). A reminder by WhatsApp, SMS or e-mail stubs a message to the paying parents.
 - **"Appel":** relabelled "appel des présences" everywhere. The menu item is now "Présences", and the office gets three tabs: students, teachers, alerts.
 - **Teachers' timetables:** a teacher already saw their own week. The office gets a "Par professeur" tab to look at any teacher's week.
+
+## D-020 — WhatsApp through wa.me links, not the Business API (for now)
+Messages to families leave from the secretary's own WhatsApp.
+- **How it works:** a WhatsApp button builds a `https://wa.me/<number>?text=…` link with the message already written, in the UI language and signed with the school's name. The secretary presses send herself.
+- **Why:** there's no Meta account, no template approval and no per-message cost, and nothing is sent without a person pressing send.
+- **What happens on click:** it records the action it stands for. An absence becomes "parent prévenu", a payment reminder is logged with the WhatsApp channel, a message reply is saved in the thread, and a pre-registration follow-up gets the WhatsApp channel.
+- **Caveat:** the sender can still cancel inside WhatsApp, so a green status means the message was opened, not that it was delivered.
+- **Where the buttons are:** alerts, absences (dashboard and roll call), payment reminders, message replies, pre-registrations, agenda (confirming an appointment), parents' and staff phone numbers, and a teacher not yet arrived.
+- **What stays the same:** `notification_outbox` still stubs the automatic messages, so the Meta Cloud API can later replace the stub without touching the screens.
+- **Announcements to every parent:** after publication, a series-send window goes through the parents the announcement reaches: one `notification_outbox` row each, created by `publish_announcement`. "Envoyer au suivant" opens the next chat, with "Bonjour + first name" as an option, and ticks that row as sent. Migration `20260926100000_outbox_sent_by_office.sql` adds `sent_at` and `sent_by_member_id`. The office may update only the status; a trigger refuses any other change. For large schools, "Exporter les contacts" produces a .vcf file to build a WhatsApp broadcast list on the school's phone.

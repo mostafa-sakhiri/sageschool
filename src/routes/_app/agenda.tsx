@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -17,6 +17,7 @@ import {
   Typography,
 } from '@mui/material'
 import AddOutlined from '@mui/icons-material/AddOutlined'
+import HowToRegOutlined from '@mui/icons-material/HowToRegOutlined'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, SectionTitle, Tag, fullName, type Tone } from '#/components/ui'
 import { EmptyState, ErrorState, Loading } from '#/components/states'
@@ -30,6 +31,7 @@ import { WeekNav, useSchoolDays } from '#/features/timetable/RealWeek'
 import { studentsQuery } from '#/features/students/api'
 import { membersQuery } from '#/features/team/api'
 import { subjectTokens, tokens } from '#/theme/theme'
+import { WhatsAppButton } from '#/components/WhatsApp'
 
 export const Route = createFileRoute('/_app/agenda')({
   // ?new=1 opens the dialog (quick actions); ?preinscription=<id> prefills an enrolment visit
@@ -40,12 +42,12 @@ export const Route = createFileRoute('/_app/agenda')({
   component: AgendaPage,
 })
 
-const KINDS = ['visit_parent', 'visit_student', 'enrollment', 'meeting', 'other'] as const
+const KINDS = ['visit_parent', 'visit_student', 'visit_prospect', 'enrollment', 'meeting', 'other'] as const
 type Kind = (typeof KINDS)[number]
 const STATUSES = ['planned', 'done', 'no_show', 'cancelled'] as const
 type Status = (typeof STATUSES)[number]
 const STATUS_TONE: Record<Status, Tone> = { planned: 'info', done: 'ok', no_show: 'danger', cancelled: 'neutral' }
-const KIND_COLOR: Record<Kind, number> = { visit_parent: 0, visit_student: 2, enrollment: 4, meeting: 6, other: 7 }
+const KIND_COLOR: Record<Kind, number> = { visit_parent: 0, visit_student: 2, visit_prospect: 1, enrollment: 4, meeting: 6, other: 7 }
 
 export type Appointment = {
   id: string
@@ -112,11 +114,11 @@ function AgendaPage() {
           await supabase.from('preinscriptions').select('id, child_first_name, child_last_name, parent_name, parent_phone').eq('id', search.preinscription).single(),
         )
         setEditing({
-          kind: 'enrollment',
+          kind: 'visit_prospect',
           preinscription_id: p.id,
           visitor_name: p.parent_name,
           visitor_phone: p.parent_phone,
-          title: t('agenda.enrollmentTitle', { name: `${p.child_first_name} ${p.child_last_name}` }),
+          title: t('agenda.prospectTitle', { name: `${p.child_first_name} ${p.child_last_name}` }),
         })
       } else setEditing({})
       navigateSelf({ search: {}, replace: true })
@@ -209,8 +211,11 @@ function AgendaPage() {
 }
 
 function TodayRow({ a, host, onOpen }: { a: Appointment; host?: string; onOpen: () => void }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const ctx = useSchool()
+  const navigate = useNavigate()
+  const toPrereg = () =>
+    navigate({ to: '/preregistrations', search: { new: true, parent: a.visitor_name ?? undefined, phone: a.visitor_phone ?? undefined, appointment: a.id } })
   const queryClient = useQueryClient()
   const setStatus = useMutation({
     mutationFn: async (status: Status) => must(await supabase.from('appointments').update({ status }).eq('id', a.id)),
@@ -229,6 +234,18 @@ function TodayRow({ a, host, onOpen }: { a: Appointment; host?: string; onOpen: 
       </Box>
       <Tag tone={STATUS_TONE[a.status]} label={t(`agenda.status.${a.status}`)} />
       {a.status === 'planned' && (
+        <WhatsAppButton
+          phone={a.visitor_phone}
+          tooltip={t('wa.appointmentTooltip')}
+          text={t('wa.appointment', { name: a.visitor_name ?? '', date: formatDate(localDate(a.starts_at), locale, { weekday: 'long', day: 'numeric', month: 'long' }), time: localTime(a.starts_at), school: ctx.school.name })}
+        />
+      )}
+      {a.kind === 'visit_prospect' && !a.preinscription_id && (
+        <Button size="small" startIcon={<HowToRegOutlined />} onClick={toPrereg}>
+          {t('agenda.toPrereg')}
+        </Button>
+      )}
+      {a.status === 'planned' && (
         <Stack direction="row" spacing={0.5}>
           <Button size="small" variant="outlined" onClick={() => setStatus.mutate('done')} loading={setStatus.isPending}>
             {t('agenda.markDone')}
@@ -243,7 +260,8 @@ function TodayRow({ a, host, onOpen }: { a: Appointment; host?: string; onOpen: 
 }
 
 function AppointmentDialog({ initial, onClose }: { initial: Partial<Appointment>; onClose: () => void }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  const navigate = useNavigate()
   const ctx = useSchool()
   const queryClient = useQueryClient()
   const students = useQuery(studentsQuery(ctx.school.id))
@@ -285,7 +303,7 @@ function AppointmentDialog({ initial, onClose }: { initial: Partial<Appointment>
         ends_at: toIso(date, endTime),
         visitor_name: visitor.trim() || null,
         visitor_phone: normalizePhone(phone) || null,
-        student_id: studentId,
+        student_id: kind === 'visit_prospect' ? null : studentId,
         host_member_id: hostId || null,
         notes: notes.trim() || null,
         status,
@@ -353,6 +371,11 @@ function AppointmentDialog({ initial, onClose }: { initial: Partial<Appointment>
               />
               <TextField type="time" label={t('agenda.to')} value={endTime} onChange={(e) => setEndTime(e.target.value)} required error={invalidTime} slotProps={{ inputLabel: { shrink: true } }} fullWidth />
             </Stack>
+            {kind === 'visit_prospect' ? (
+              <Alert severity="info" icon={false}>
+                {t('agenda.prospectHint')}
+              </Alert>
+            ) : (
             <Autocomplete
               options={students.data ?? []}
               value={(students.data ?? []).find((s) => s.id === studentId) ?? null}
@@ -360,9 +383,15 @@ function AppointmentDialog({ initial, onClose }: { initial: Partial<Appointment>
               getOptionLabel={(s) => fullName(s)}
               renderInput={(params) => <TextField {...params} label={t('agenda.student')} helperText={t('agenda.studentHint')} />}
             />
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            )}
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' } }}>
               <TextField label={t('agenda.visitor')} value={visitor} onChange={(e) => setVisitor(e.target.value)} fullWidth />
               <TextField label={t('common.phone')} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} fullWidth slotProps={{ htmlInput: { dir: 'ltr' } }} />
+              <WhatsAppButton
+                phone={phone}
+                tooltip={t('wa.appointmentTooltip')}
+                text={t('wa.appointment', { name: visitor, date: formatDate(date, locale, { weekday: 'long', day: 'numeric', month: 'long' }), time: startTime, school: ctx.school.name })}
+              />
             </Stack>
             <TextField select label={t('agenda.host')} value={hostId} onChange={(e) => setHostId(e.target.value)} slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}>
               <MenuItem value="">—</MenuItem>
@@ -390,6 +419,14 @@ function AppointmentDialog({ initial, onClose }: { initial: Partial<Appointment>
           {isEdit && (
             <Button color="error" onClick={() => remove.mutate()} loading={remove.isPending} sx={{ mr: 'auto' }}>
               {t('common.delete')}
+            </Button>
+          )}
+          {isEdit && kind === 'visit_prospect' && !initial.preinscription_id && (
+            <Button
+              startIcon={<HowToRegOutlined />}
+              onClick={() => navigate({ to: '/preregistrations', search: { new: true, parent: visitor || undefined, phone: phone || undefined, appointment: initial.id } })}
+            >
+              {t('agenda.toPrereg')}
             </Button>
           )}
           <Button onClick={onClose}>{t('common.cancel')}</Button>

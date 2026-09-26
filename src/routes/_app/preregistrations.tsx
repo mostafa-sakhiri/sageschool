@@ -40,10 +40,18 @@ import { addDays, formatDate, formatDateTime, formatPhone, normalizePhone, today
 import { nodeLabel, nodesQuery } from '#/features/structure/api'
 import { AddStudentDialog, type StudentPrefill } from '#/features/students/AddStudentDialog'
 import { tokens } from '#/theme/theme'
+import { WhatsAppButton } from '#/components/WhatsApp'
 import { ACTIVE, CHANNELS, FOLLOWUP_EVERY, STATUSES, TONE, followupDue, preregsQuery, type Prereg, type Status } from '#/features/preregistrations/api'
 
 export const Route = createFileRoute('/_app/preregistrations')({
-  validateSearch: (s: Record<string, unknown>): { new?: boolean } => ({ new: s.new === true || s.new === 1 || s.new === '1' || undefined }),
+  // ?new=1 opens the form; parent/phone prefill it and ?appointment links the
+  // agenda visit it came from (a prospect's visit)
+  validateSearch: (s: Record<string, unknown>): { new?: boolean; parent?: string; phone?: string; appointment?: string } => ({
+    new: s.new === true || s.new === 1 || s.new === '1' || undefined,
+    parent: typeof s.parent === 'string' ? s.parent : undefined,
+    phone: typeof s.phone === 'string' ? s.phone : undefined,
+    appointment: typeof s.appointment === 'string' ? s.appointment : undefined,
+  }),
   component: PreregistrationsPage,
 })
 
@@ -53,7 +61,7 @@ function PreregistrationsPage() {
   const list = useQuery(preregsQuery(ctx.school.id))
   const nodes = useQuery(nodesQuery(ctx.school.id))
   const [filter, setFilter] = useState<'active' | 'due' | 'enrolled' | 'dropped'>('active')
-  const [editing, setEditing] = useState<Partial<Prereg> | null>(null)
+  const [editing, setEditing] = useState<(Partial<Prereg> & { appointmentId?: string }) | null>(null)
   const [following, setFollowing] = useState<Prereg | null>(null)
   const [enrolling, setEnrolling] = useState<Prereg | null>(null)
   const search = Route.useSearch()
@@ -61,9 +69,9 @@ function PreregistrationsPage() {
   const navigate = useNavigate()
   useEffect(() => {
     if (!search.new) return
-    setEditing({})
+    setEditing({ parent_name: search.parent, parent_phone: search.phone, source: search.appointment ? t('prereg.fromVisit') : undefined, appointmentId: search.appointment })
     navigateSelf({ search: {}, replace: true })
-  }, [search.new, navigateSelf])
+  }, [search.new, search.parent, search.phone, search.appointment, navigateSelf, t])
 
   const all = list.data ?? []
   const rows = all.filter((p) =>
@@ -158,7 +166,7 @@ function PreregistrationsPage() {
                         <TableCell>{level(p.node_id)}</TableCell>
                         <TableCell>
                           <Typography sx={{ fontSize: 14 }}>{p.parent_name}</Typography>
-                          <Typography dir="ltr" sx={{ fontSize: 12.5, color: tokens.inkMuted, textAlign: 'start' }}>
+                          <Typography dir="ltr" sx={{ fontSize: 12.5, color: tokens.inkMuted, textAlign: 'start', whiteSpace: 'nowrap' }}>
                             {[formatPhone(p.parent_phone), p.parent_email].filter(Boolean).join(' · ')}
                           </Typography>
                         </TableCell>
@@ -231,7 +239,7 @@ function PreregistrationsPage() {
   )
 }
 
-function PreregDialog({ initial, onClose }: { initial: Partial<Prereg>; onClose: () => void }) {
+function PreregDialog({ initial, onClose }: { initial: Partial<Prereg> & { appointmentId?: string }; onClose: () => void }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
@@ -269,10 +277,17 @@ function PreregDialog({ initial, onClose }: { initial: Partial<Prereg>; onClose:
         next_followup_on: f.next_followup_on || null,
       }
       if (isEdit) must(await supabase.from('preinscriptions').update(row).eq('id', initial.id!))
-      else must(await supabase.from('preinscriptions').insert({ ...row, school_id: ctx.school.id, created_by_member_id: ctx.member.id }))
+      else {
+        const p = must(await supabase.from('preinscriptions').insert({ ...row, school_id: ctx.school.id, created_by_member_id: ctx.member.id }).select('id').single())
+        // Came from a prospect's visit: link it, and the family is already contacted
+        if (initial.appointmentId) {
+          must(await supabase.from('appointments').update({ preinscription_id: p.id }).eq('id', initial.appointmentId))
+          if (row.status === 'new') must(await supabase.from('preinscriptions').update({ status: 'contacted' }).eq('id', p.id))
+        }
+      }
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'preinscriptions'] })
+      await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id] })
       onClose()
     },
   })
@@ -387,14 +402,23 @@ function FollowupDialog({ p, onClose }: { p: Prereg; onClose: () => void }) {
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
-          <Typography>
-            {p.parent_name}
-            {p.parent_phone && (
-              <Box component="a" href={`tel:${p.parent_phone}`} dir="ltr" sx={{ ml: 1, color: tokens.accentDark, fontWeight: 600 }}>
-                {formatPhone(p.parent_phone)}
-              </Box>
-            )}
-          </Typography>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <Typography sx={{ flex: 1 }}>
+              {p.parent_name}
+              {p.parent_phone && (
+                <Box component="a" href={`tel:${p.parent_phone}`} dir="ltr" sx={{ ml: 1, color: tokens.accentDark, fontWeight: 600 }}>
+                  {formatPhone(p.parent_phone)}
+                </Box>
+              )}
+            </Typography>
+            <WhatsAppButton
+              phone={p.parent_phone}
+              label={t('wa.write')}
+              tooltip={t('wa.preregTooltip')}
+              text={t('wa.prereg', { parent: p.parent_name, child: p.child_first_name, school: ctx.school.name })}
+              onSent={() => setChannel('whatsapp')}
+            />
+          </Stack>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField select label={t('prereg.channelLabel')} value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)} fullWidth>
               {CHANNELS.map((c) => (

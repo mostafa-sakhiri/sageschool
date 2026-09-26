@@ -32,6 +32,7 @@ import { membersQuery, type MemberRow } from '#/features/team/api'
 import { RoleDialog, type RoleOutcome } from '#/features/team/RoleDialog'
 import { ContactDialog, type ContactTarget } from '#/features/team/ContactDialog'
 import { formatPhone } from '#/lib/format'
+import { WhatsAppButton } from '#/components/WhatsApp'
 import { ImportDialog } from '#/features/import/ImportZone'
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
 import { tokens } from '#/theme/theme'
@@ -138,6 +139,7 @@ function TeamPage() {
                       <TableCell dir="ltr" sx={{ textAlign: 'start', whiteSpace: 'nowrap' }}>
                         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
                           <span>{formatPhone(m.user?.phone) || '—'}</span>
+                          {m.user?.id !== ctx.user.id && <WhatsAppButton phone={m.user?.phone} text={t('wa.helloStaff', { name: m.user?.full_name ?? '' })} />}
                           {(ctx.isAdmin || m.user?.id === ctx.user.id) && m.user && (
                             <Tooltip title={t('contact.title')}>
                               <IconButton

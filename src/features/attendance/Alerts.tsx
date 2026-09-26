@@ -28,6 +28,7 @@ import { formatDate, formatDateTime, formatPhone } from '#/lib/format'
 import { currentEnrollment, studentsQuery } from '#/features/students/api'
 import { tokens } from '#/theme/theme'
 import { alertsQuery, type StudentAlert } from './api'
+import { WhatsAppParents, guardiansToRecipients } from '#/components/WhatsApp'
 
 // Alerts about a student: created automatically after 3 school days of absence
 // in a row (database trigger), or by hand. The office calls the family and
@@ -133,7 +134,19 @@ export function AlertsPanel() {
                         </Typography>
                       )}
                     </Box>
-                    <Stack direction="row" spacing={1}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      {a.status !== 'closed' && s && (
+                        <WhatsAppParents
+                          parents={guardiansToRecipients(s.guardians)}
+                          label={t('wa.write')}
+                          text={(name) =>
+                            a.kind === 'absence_streak'
+                              ? t('wa.streak', { parent: name, child: fullName(s), n: a.days ?? 0, from: formatDate(a.starts_on, locale), to: formatDate(a.ends_on, locale), school: ctx.school.name })
+                              : t('wa.alert', { parent: name, child: fullName(s), title: a.title ?? '', school: ctx.school.name })
+                          }
+                          onSent={() => a.status === 'open' && update.mutate({ a, status: 'notified' })}
+                        />
+                      )}
                       {a.status === 'open' && (
                         <Button variant="contained" size="small" startIcon={<CheckCircleOutlined />} onClick={() => update.mutate({ a, status: 'notified' })}>
                           {t('alerts.markNotified')}
