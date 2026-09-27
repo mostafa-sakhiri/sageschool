@@ -28,6 +28,9 @@ const toMin = (t: string) => {
 // blocks sized by duration, but never too short to read (see timeAxis).
 // Scrolls horizontally on phones.
 const BLOCK_MIN = 30 // px: time + title on one line
+// A session with a teacher (or other details) always shows its first line
+// under the title, however short it is: the teacher must be visible
+const BLOCK_MIN_LINES = 46
 const BAND_MIN = 18 // px: a pause label
 const TICK_GAP = 14 // px between two ruler labels
 export function WeekGrid({
@@ -61,7 +64,7 @@ export function WeekGrid({
     earliest,
     latest,
     [
-      ...blocks.map((b) => ({ start: toMin(b.start), end: toMin(b.end), min: BLOCK_MIN })),
+      ...blocks.map((b) => ({ start: toMin(b.start), end: toMin(b.end), min: b.lines?.length ? BLOCK_MIN_LINES : BLOCK_MIN })),
       ...(bands ?? []).map((b) => ({ start: toMin(b.start), end: toMin(b.end), min: BAND_MIN })),
     ],
     1.1, // px per minute where nothing needs more room
@@ -178,6 +181,7 @@ export function WeekGrid({
                     }}
                     disabled={!b.onClick}
                     aria-label={`${b.title} ${hhmm(b.start)}–${hhmm(b.end)} ${(b.lines ?? []).join(' ')}`}
+                    title={[b.title, `${hhmm(b.start)}–${hhmm(b.end)}`, ...(b.lines ?? [])].join(' · ')}
                     sx={{
                       position: 'absolute',
                       top,
@@ -195,7 +199,9 @@ export function WeekGrid({
                     }}
                   >
                     <Stack direction="row" spacing={0.5} sx={{ alignItems: 'baseline' }}>
-                      <Typography sx={{ fontSize: 11, fontWeight: 600, opacity: 0.8 }}>{hhmm(b.start)}</Typography>
+                      <Typography dir="ltr" sx={{ fontSize: 11, fontWeight: 600, opacity: 0.8, whiteSpace: 'nowrap' }}>
+                        {hhmm(b.start)}–{hhmm(b.end)}
+                      </Typography>
                       <Typography
                         noWrap
                         sx={{ fontSize: 12.5, fontWeight: 600, textDecoration: b.strike ? 'line-through' : 'none' }}

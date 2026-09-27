@@ -23,13 +23,13 @@ import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
 import { errorMessage, must } from '#/lib/errors'
 import { addDays, formatDate, hhmm, mondayOf, todayIso } from '#/lib/format'
-import { roomsQuery, subjectsQuery } from '#/features/structure/api'
+import { formatMinutes, roomsQuery, subjectsQuery } from '#/features/structure/api'
 import { teachersQuery } from '#/features/classes/api'
 import { ErrorState, Loading } from '#/components/states'
 import { Tag } from '#/components/ui'
 import { WeekGrid, type Band, type Block } from './WeekGrid'
 import { nodesQuery } from '#/features/structure/api'
-import { dayOf, horaireForNode, readHoraires, unionBounds } from '#/features/setup/schedule'
+import { dayOf, horaireForNode, readHoraires, toMin, unionBounds } from '#/features/setup/schedule'
 import { pauseLabel } from '#/features/setup/ScheduleEditor'
 import { classWeekQuery, membersNamesQuery, subjectColor, type DaySession } from './api'
 import { tokens } from '#/theme/theme'
@@ -136,7 +136,7 @@ export function RealWeek({
               : s.status === 'added'
                 ? t('tt.added')
                 : undefined,
-        onClick: allowExceptions && s.slot_id && s.status === 'scheduled' ? () => setPicked({ date, s }) : undefined,
+        onClick: () => setPicked({ date, s }),
       })
     }
   }
@@ -189,11 +189,17 @@ export function RealWeek({
       )}
       <ExceptionsList classId={classId} monday={monday} canEdit={allowExceptions} />
       {picked && (
-        <ExceptionDialog
+        <SessionDialog
           classId={classId}
           date={picked.date}
           session={picked.s}
-          label={`${subjectName(picked.s.subject_id) ?? ''} · ${formatDate(picked.date, locale)} ${hhmm(picked.s.starts_at)}`}
+          detail={{
+            title: picked.s.title || subjectName(picked.s.subject_id) || '—',
+            subject: picked.s.title ? subjectName(picked.s.subject_id) : undefined,
+            teacher: names.data?.[picked.s.teacher_member_id ?? ''],
+            room: roomName(picked.s.room_id),
+          }}
+          canEdit={allowExceptions && !!picked.s.slot_id && picked.s.status === 'scheduled'}
           onClose={() => setPicked(null)}
         />
       )}
@@ -213,20 +219,24 @@ function useInvalidateWeek() {
     ])
 }
 
-function ExceptionDialog({
+// A session's detail: day, start and end, duration, teacher, room. The office
+// can also replace the teacher or cancel the session that day (an exception).
+function SessionDialog({
   classId,
   date,
   session,
-  label,
+  detail,
+  canEdit,
   onClose,
 }: {
   classId: string
   date: string
   session: DaySession
-  label: string
+  detail: { title: string; subject?: string; teacher?: string; room?: string }
+  canEdit: boolean
   onClose: () => void
 }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const ctx = useSchool()
   const teachers = useQuery(teachersQuery(ctx.school.id))
   const invalidate = useInvalidateWeek()
@@ -267,37 +277,62 @@ function ExceptionDialog({
     },
   })
 
+  const minutes = session.starts_at && session.ends_at ? toMin(hhmm(session.ends_at)) - toMin(hhmm(session.starts_at)) : 0
+  const row = (label: string, value?: string) =>
+    value ? (
+      <Stack direction="row" spacing={1.5}>
+        <Typography sx={{ fontSize: 13, color: tokens.inkMuted, minWidth: 96 }}>{label}</Typography>
+        <Typography dir="auto" sx={{ fontSize: 14 }}>
+          {value}
+        </Typography>
+      </Stack>
+    ) : null
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{t('tt.exceptionTitle')}</DialogTitle>
+      <DialogTitle dir="auto">{detail.title}</DialogTitle>
       <DialogContent>
-        <Stack spacing={2} sx={{ pt: 1 }}>
-          <Typography sx={{ fontWeight: 600 }}>{label}</Typography>
-          <ToggleButtonGroup exclusive value={kind} onChange={(_, v) => v && setKind(v)} size="small">
-            <ToggleButton value="changed">{t('tt.substitute')}</ToggleButton>
-            <ToggleButton value="cancelled">{t('tt.cancelSession')}</ToggleButton>
-          </ToggleButtonGroup>
-          {kind === 'changed' && (
-            <TextField select label={t('tt.substituteTeacher')} value={substitute} onChange={(e) => setSubstitute(e.target.value)}>
-              {(teachers.data ?? [])
-                .filter((x) => x.id !== session.teacher_member_id)
-                .map((x) => (
-                  <MenuItem key={x.id} value={x.id}>
-                    {x.name}
-                  </MenuItem>
-                ))}
-            </TextField>
+        <Stack spacing={2} sx={{ pt: 0.5 }}>
+          <Stack spacing={0.75}>
+            {row(t('common.date'), formatDate(date, locale, { weekday: 'long', day: 'numeric', month: 'long' }))}
+            {row(t('tt.time'), `${hhmm(session.starts_at)} – ${hhmm(session.ends_at)}${minutes > 0 ? ` · ${formatMinutes(minutes, locale)}` : ''}`)}
+            {row(t('classes.subject'), detail.subject)}
+            {row(t('classes.teacher'), detail.teacher ?? t('tt.noTeacher'))}
+            {row(t('classes.room'), detail.room)}
+            {session.status !== 'scheduled' && row(t('common.status'), t(`tt.kind.${session.status}`))}
+            {session.reason && row(t('tt.reason'), session.reason)}
+          </Stack>
+          {canEdit && (
+            <>
+              <Typography variant="h6">{t('tt.exceptionTitle')}</Typography>
+              <ToggleButtonGroup exclusive value={kind} onChange={(_, v) => v && setKind(v)} size="small">
+                <ToggleButton value="changed">{t('tt.substitute')}</ToggleButton>
+                <ToggleButton value="cancelled">{t('tt.cancelSession')}</ToggleButton>
+              </ToggleButtonGroup>
+              {kind === 'changed' && (
+                <TextField select label={t('tt.substituteTeacher')} value={substitute} onChange={(e) => setSubstitute(e.target.value)}>
+                  {(teachers.data ?? [])
+                    .filter((x) => x.id !== session.teacher_member_id)
+                    .map((x) => (
+                      <MenuItem key={x.id} value={x.id}>
+                        {x.name}
+                      </MenuItem>
+                    ))}
+                </TextField>
+              )}
+              {conflict && <Alert severity="warning">{t('tt.substituteBusy')}</Alert>}
+              <TextField label={t('tt.reason')} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t('tt.reasonPlaceholder')} />
+              {save.isError && <Alert severity="error">{errorMessage(save.error, t)}</Alert>}
+            </>
           )}
-          {conflict && <Alert severity="warning">{t('tt.substituteBusy')}</Alert>}
-          <TextField label={t('tt.reason')} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t('tt.reasonPlaceholder')} />
-          {save.isError && <Alert severity="error">{errorMessage(save.error, t)}</Alert>}
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>{t('common.cancel')}</Button>
-        <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending} disabled={kind === 'changed' && !substitute}>
-          {t('common.save')}
-        </Button>
+        <Button onClick={onClose}>{canEdit ? t('common.cancel') : t('common.close')}</Button>
+        {canEdit && (
+          <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending} disabled={kind === 'changed' && !substitute}>
+            {t('common.save')}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   )
