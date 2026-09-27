@@ -938,7 +938,7 @@
   "tt.version": "الإصدار",
   "tt.weekOf": "أسبوع {date}",
   "wa.aboutChild": "السلام عليكم {name}، معكم {school} بخصوص {child}.",
-  "wa.absence": "السلام عليكم {parent}، معكم {school}. {child} غائب(ة) {date}. هل يمكنكم إخبارنا بالسبب؟ شكرا.",
+  "wa.absence": "السلام عليكم 😊\nلاحظنا غياب طفلكم اليوم. نتمنى أن يكون كل شيء على ما يرام عندكم. لا تترددوا في طمأنتنا عليه. 🌷",
   "wa.alert": "السلام عليكم {parent}، معكم {school}. نود التحدث معكم بخصوص {child}: {title}. متى يمكننا الاتصال بكم؟",
   "wa.announcement": "{school} — {title}: {body}",
   "wa.appointment": "السلام عليكم {name}، معكم {school}. نؤكد لكم موعدكم {date} على الساعة {time}. إلى اللقاء.",

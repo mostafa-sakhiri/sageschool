@@ -938,7 +938,7 @@
   "tt.version": "Version",
   "tt.weekOf": "Semaine du {date}",
   "wa.aboutChild": "Bonjour {name}, c'est {school} au sujet de {child}.",
-  "wa.absence": "Bonjour {parent}, c'est {school}. {child} est absent(e) {date}. Pouvez-vous nous en indiquer le motif ? Merci.",
+  "wa.absence": "Bonjour 😊\nNous avons remarqué l’absence de votre enfant aujourd’hui. J’espère que tout va bien de votre côté. N’hésitez pas à nous donner de ses nouvelles. 🌷",
   "wa.alert": "Bonjour {parent}, c'est {school}. Nous souhaitons vous parler au sujet de {child} : {title}. Quand pouvons-nous vous appeler ?",
   "wa.announcement": "{school} — {title} : {body}",
   "wa.appointment": "Bonjour {name}, c'est {school}. Nous vous confirmons votre rendez-vous {date} à {time}. À bientôt.",
