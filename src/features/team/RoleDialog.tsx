@@ -58,6 +58,8 @@ export function RoleDialog({
               key={r}
               value={r}
               control={<Radio />}
+              // An administrator must have an e-mail (it's how a forgotten password comes back)
+              disabled={r === 'admin' && member.role !== 'admin' && !member.user?.email}
               sx={{ alignItems: 'flex-start', my: 0.5, '& .MuiRadio-root': { pt: 0.25 } }}
               label={
                 <Stack>
@@ -71,7 +73,7 @@ export function RoleDialog({
                     )}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {t(`team.roleHint.${r}`)}
+                    {r === 'admin' && member.role !== 'admin' && !member.user?.email ? t('team.adminNeedsEmail') : t(`team.roleHint.${r}`)}
                   </Typography>
                 </Stack>
               }

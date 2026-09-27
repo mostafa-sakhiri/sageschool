@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router'
-import { Alert, Button, Paper, Stack, Tab, Tabs, TextField, Typography } from '@mui/material'
+import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Stack, Tab, Tabs, TextField, Typography } from '@mui/material'
 import { supabase } from '#/lib/supabase/client'
 import { errorMessage } from '#/lib/errors'
 import { loginIdentifier } from '#/lib/phoneLogin'
@@ -26,6 +26,7 @@ function LoginPage() {
   const [fullName, setFullName] = useState('')
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
+  const [forgot, setForgot] = useState(false)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -99,7 +100,77 @@ function LoginPage() {
             {mode === 'signin' ? t('auth.signIn') : t('auth.signUp')}
           </Button>
         </Stack>
+        {mode === 'signin' && (
+          <Button size="small" onClick={() => setForgot(true)} sx={{ mt: 1.5, alignSelf: 'flex-start' }}>
+            {t('auth.forgot')}
+          </Button>
+        )}
+        {forgot && <ForgotPassword initial={email} onClose={() => setForgot(false)} />}
       </Paper>
     </OnboardingShell>
+  )
+}
+
+// Forgotten password, for accounts with an e-mail: a link by e-mail to
+// /reset-password (template supabase/templates/recovery.html). A phone-only
+// account has no mailbox: the school hands over a link instead. The answer
+// never says whether the address has an account.
+function ForgotPassword({ initial, onClose }: { initial: string; onClose: () => void }) {
+  const { t } = useI18n()
+  const [value, setValue] = useState(initial.includes('@') ? initial : '')
+  const [state, setState] = useState<'idle' | 'busy' | 'sent' | 'phone'>('idle')
+  const [error, setError] = useState<unknown>(null)
+  const send = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!value.includes('@')) return setState('phone')
+    setState('busy')
+    setError(null)
+    const { error: err } = await supabase.auth.resetPasswordForEmail(value.trim(), { redirectTo: `${window.location.origin}/reset-password` })
+    // Unknown addresses are not an error (no account enumeration); rate limits are
+    if (err && err.status === 429) {
+      setError(err)
+      setState('idle')
+    } else setState('sent')
+  }
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
+      <form onSubmit={send}>
+        <DialogTitle>{t('auth.forgotTitle')}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            {state === 'sent' ? (
+              <Alert severity="success">{t('auth.forgotSent')}</Alert>
+            ) : (
+              <>
+                <Typography variant="body2" color="text.secondary">
+                  {t('auth.forgotHint')}
+                </Typography>
+                <TextField
+                  label={t('auth.emailOrPhone')}
+                  value={value}
+                  onChange={(e) => {
+                    setValue(e.target.value)
+                    if (state === 'phone') setState('idle')
+                  }}
+                  autoFocus
+                  autoComplete="username"
+                  slotProps={{ htmlInput: { dir: 'ltr' } }}
+                />
+                {state === 'phone' && <Alert severity="info">{t('auth.forgotPhone')}</Alert>}
+                {!!error && <Alert severity="error">{errorMessage(error, t)}</Alert>}
+              </>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose}>{t('common.close')}</Button>
+          {state !== 'sent' && (
+            <Button type="submit" variant="contained" loading={state === 'busy'} disabled={!value.trim()}>
+              {t('auth.forgotSend')}
+            </Button>
+          )}
+        </DialogActions>
+      </form>
+    </Dialog>
   )
 }
