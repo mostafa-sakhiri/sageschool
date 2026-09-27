@@ -1,6 +1,7 @@
 import { Box, ButtonBase, Paper, Stack, Typography } from '@mui/material'
 import { tokens } from '#/theme/theme'
 import { hhmm } from '#/lib/format'
+import { timeAxis } from './timeAxis'
 
 export type Block = {
   key: string
@@ -23,8 +24,12 @@ const toMin = (t: string) => {
   return h * 60 + m
 }
 
-// Proportional week grid (mockup "La semaine d'une classe"): one column per
-// school day, blocks sized by duration. Scrolls horizontally on phones.
+// Week grid (mockup "La semaine d'une classe"): one column per school day,
+// blocks sized by duration, but never too short to read (see timeAxis).
+// Scrolls horizontally on phones.
+const BLOCK_MIN = 30 // px: time + title on one line
+const BAND_MIN = 18 // px: a pause label
+const TICK_GAP = 14 // px between two ruler labels
 export function WeekGrid({
   days,
   dayLabels,
@@ -52,10 +57,22 @@ export function WeekGrid({
 }) {
   const earliest = Math.min(toMin(dayStart), ...blocks.map((b) => toMin(b.start)), ...(bands ?? []).map((b) => toMin(b.start)))
   const latest = Math.max(toMin(dayEnd), ...blocks.map((b) => toMin(b.end)), ...(bands ?? []).map((b) => toMin(b.end)))
-  const scale = 1.1 // px per minute
-  const height = (latest - earliest) * scale
-  const hours: number[] = []
-  for (let m = Math.ceil(earliest / 60) * 60; m <= latest; m += 60) hours.push(m)
+  const axis = timeAxis(
+    earliest,
+    latest,
+    [
+      ...blocks.map((b) => ({ start: toMin(b.start), end: toMin(b.end), min: BLOCK_MIN })),
+      ...(bands ?? []).map((b) => ({ start: toMin(b.start), end: toMin(b.end), min: BAND_MIN })),
+    ],
+    1.1, // px per minute where nothing needs more room
+  )
+  const y = (m: number) => axis.y(m) - axis.y(earliest)
+  const height = axis.height
+  // Ruler: the times something starts (not round hours, which the stretched
+  // axis would scatter), skipping a label too close to the previous one
+  const starts = new Set([...blocks, ...(bands ?? [])].map((b) => toMin(b.start)))
+  const ticks: number[] = []
+  for (const m of axis.cuts) if (starts.has(m) && (!ticks.length || y(m) - y(ticks[ticks.length - 1]) >= TICK_GAP)) ticks.push(m)
 
   return (
     <Paper variant="outlined" sx={{ overflowX: 'auto', bgcolor: tokens.content }}>
@@ -68,12 +85,21 @@ export function WeekGrid({
           </Box>
         ))}
         <Box sx={{ position: 'relative', height }}>
-          {hours.map((m) => (
+          {ticks.map((m) => (
             <Typography
               key={m}
-              sx={{ position: 'absolute', top: (m - earliest) * scale - 7, insetInlineEnd: 6, fontSize: 11, color: tokens.inkMuted }}
+              sx={{
+                position: 'absolute',
+                top: y(m) - 1,
+                insetInlineEnd: 6,
+                fontSize: 11,
+                lineHeight: 1,
+                color: m % 60 === 0 ? tokens.inkSoft : tokens.inkMuted,
+                fontWeight: m % 60 === 0 ? 600 : 400,
+                fontVariantNumeric: 'tabular-nums',
+              }}
             >
-              {String(Math.floor(m / 60)).padStart(2, '0')}:00
+              {String(Math.floor(m / 60)).padStart(2, '0')}:{String(m % 60).padStart(2, '0')}
             </Typography>
           ))}
         </Box>
@@ -83,16 +109,16 @@ export function WeekGrid({
             onClick={
               onEmptyClick
                 ? (e) => {
-                    const y = e.clientY - e.currentTarget.getBoundingClientRect().top
-                    const m = Math.floor((earliest + y / scale) / 5) * 5
+                    const py = e.clientY - e.currentTarget.getBoundingClientRect().top
+                    const m = Math.floor(axis.minuteAt(py) / 5) * 5
                     onEmptyClick(d, `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`)
                   }
                 : undefined
             }
             sx={{ position: 'relative', height, borderInlineStart: `1px solid ${tokens.lineSoft}`, cursor: onEmptyClick ? 'copy' : undefined }}
           >
-            {hours.map((m) => (
-              <Box key={m} sx={{ position: 'absolute', insetInline: 0, top: (m - earliest) * scale, borderTop: `1px dashed ${tokens.lineSoft}` }} />
+            {ticks.map((m) => (
+              <Box key={m} sx={{ position: 'absolute', insetInline: 0, top: y(m), borderTop: `1px dotted ${tokens.lineSoft}` }} />
             ))}
             {dayRanges &&
               (() => {
@@ -104,8 +130,8 @@ export function WeekGrid({
                       sx={{
                         position: 'absolute',
                         insetInline: 0,
-                        top: (from - earliest) * scale,
-                        height: (to - from) * scale,
+                        top: y(from),
+                        height: y(to) - y(from),
                         bgcolor: tokens.card,
                         backgroundImage: `repeating-linear-gradient(135deg, transparent 0 6px, ${tokens.lineSoft} 6px 7px)`,
                       }}
@@ -122,8 +148,8 @@ export function WeekGrid({
                   sx={{
                     position: 'absolute',
                     insetInline: 4,
-                    top: (toMin(b.start) - earliest) * scale,
-                    height: Math.max(12, (toMin(b.end) - toMin(b.start)) * scale - 2),
+                    top: y(toMin(b.start)),
+                    height: Math.max(12, y(toMin(b.end)) - y(toMin(b.start)) - 2),
                     borderRadius: '8px',
                     bgcolor: b.kind === 'nap' ? tokens.napBg : b.kind === 'recess' ? tokens.recessBg : tokens.fill,
                     border: `1px dashed ${tokens.line}`,
@@ -134,15 +160,15 @@ export function WeekGrid({
                   }}
                 >
                   <Typography noWrap sx={{ fontSize: 11, color: tokens.inkMuted, fontStyle: 'italic' }}>
-                    {(toMin(b.end) - toMin(b.start)) * scale >= 20 ? `${hhmm(b.start)} ${b.label}` : b.label}
+                    {y(toMin(b.end)) - y(toMin(b.start)) >= 20 ? `${hhmm(b.start)} ${b.label}` : b.label}
                   </Typography>
                 </Box>
               ))}
             {blocks
               .filter((b) => b.weekday === d)
               .map((b) => {
-                const top = (toMin(b.start) - earliest) * scale
-                const h = Math.max(22, (toMin(b.end) - toMin(b.start)) * scale - 3)
+                const top = y(toMin(b.start))
+                const h = Math.max(22, y(toMin(b.end)) - top - 3)
                 return (
                   <ButtonBase
                     key={b.key}

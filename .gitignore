@@ -8,3 +8,6 @@ dist
 .nitro
 *.local
 .vercel
+
+# Real school data (children, parents, phones): never committed
+scripts/ptichou/

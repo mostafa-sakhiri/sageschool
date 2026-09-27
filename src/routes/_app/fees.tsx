@@ -56,6 +56,7 @@ function FeesPage() {
   const [filter, setFilter] = useState<'all' | 'open' | 'overdue' | 'toRemind'>('all')
   const [paying, setPaying] = useState<Balance | null>(null)
   const [reminding, setReminding] = useState<Balance | null>(null)
+  const [rating, setRating] = useState<Balance | null>(null)
   const reminders = useQuery({
     queryKey: ['school', ctx.school.id, 'reminders', ctx.year?.id],
     enabled: !!ctx.year && ctx.canFees,
@@ -178,6 +179,9 @@ function FeesPage() {
                               {t('fees.remind')}
                             </Button>
                           )}
+                          <Button size="small" color="inherit" onClick={() => setRating(b)}>
+                            {t('fees.rate')}
+                          </Button>
                           {Number(b.amount_remaining) > 0 && b.payment_status !== 'cancelled' && (
                             <Button size="small" onClick={() => setPaying(b)}>
                               {t('fees.record')}
@@ -200,6 +204,14 @@ function FeesPage() {
       )}
       {paying && <PaymentDialog balance={paying} studentName={name(paying.student_id)} onClose={() => setPaying(null)} />}
       {planOpen && <PlanDialog onClose={() => setPlanOpen(false)} />}
+      {rating && (
+        <RateDialog
+          balance={rating}
+          studentName={name(rating.student_id)}
+          paidById={Object.fromEntries((balances.data ?? []).map((b) => [b.id, Number(b.amount_paid)]))}
+          onClose={() => setRating(null)}
+        />
+      )}
       {reminding && (
         <ReminderDialog
           balance={reminding}
@@ -282,6 +294,98 @@ function PaymentDialog({ balance, studentName, onClose }: { balance: Balance; st
           </Button>
         </DialogActions>
       </form>
+    </Dialog>
+  )
+}
+
+// One child's monthly fee (reduction, half day, end of a reduction...): the
+// plan's installments of the year change from a given month on. Months that
+// already received a payment keep their amount.
+function RateDialog({
+  balance,
+  studentName,
+  paidById,
+  onClose,
+}: {
+  balance: Balance
+  studentName: string
+  paidById: Record<string, number>
+  onClose: () => void
+}) {
+  const { t, locale } = useI18n()
+  const ctx = useSchool()
+  const queryClient = useQueryClient()
+  const months = useQuery({
+    queryKey: ['school', ctx.school.id, 'monthly-of', balance.student_id, ctx.year!.id],
+    queryFn: async () =>
+      must(
+        await supabase
+          .from('fee_installments')
+          .select('id, label, due_on, amount_due')
+          .eq('student_id', balance.student_id)
+          .eq('academic_year_id', ctx.year!.id)
+          .eq('status', 'active')
+          .not('fee_plan_id', 'is', null)
+          .order('due_on'),
+      ),
+  })
+  const [from, setFrom] = useState('')
+  const [amount, setAmount] = useState('')
+  const list = months.data ?? []
+  const start = from || list.find((m) => !paidById[m.id])?.due_on || list[0]?.due_on || ''
+  const shown = amount || (list.length ? String(list[list.length - 1].amount_due) : '')
+  const after = list.filter((m) => m.due_on >= start)
+  const changed = after.filter((m) => !paidById[m.id])
+  const kept = after.length - changed.length
+  const n = Number(shown)
+  const save = useMutation({
+    mutationFn: async () =>
+      must(await supabase.from('fee_installments').update({ amount_due: n }).in('id', changed.map((m) => m.id))),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id] })
+      onClose()
+    },
+  })
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle>{t('fees.rateTitle')}</DialogTitle>
+      <DialogContent>
+        <QueryState query={months} rows={2} empty={(d) => (d.length === 0 ? <Alert severity="info">{t('fees.rateNone')}</Alert> : null)}>
+          {() => (
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              <Typography>
+                <strong>{studentName}</strong>
+              </Typography>
+              <TextField select label={t('fees.rateFrom')} value={start} onChange={(e) => setFrom(e.target.value)}>
+                {list.map((m) => (
+                  <MenuItem key={m.id} value={m.due_on}>
+                    {m.label} · {formatMoney(m.amount_due, locale)}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                label={t('fees.rateNew')}
+                type="number"
+                value={shown}
+                onChange={(e) => setAmount(e.target.value)}
+                slotProps={{ htmlInput: { min: 0, step: 1 } }}
+                required
+              />
+              <Box sx={{ p: 1.5, bgcolor: tokens.fill, borderRadius: 2 }}>
+                <Typography sx={{ fontSize: 14 }}>{t('fees.ratePreview', { n: changed.length, amount: formatMoney(n || 0, locale) })}</Typography>
+                {kept > 0 && <Typography sx={{ fontSize: 13, color: tokens.inkMuted }}>{t('fees.rateKeepPaid', { n: kept })}</Typography>}
+              </Box>
+              {save.isError && <Alert severity="error">{errorMessage(save.error, t)}</Alert>}
+            </Stack>
+          )}
+        </QueryState>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+        <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending} disabled={!(n >= 0) || shown === '' || changed.length === 0}>
+          {t('fees.rateSave')}
+        </Button>
+      </DialogActions>
     </Dialog>
   )
 }

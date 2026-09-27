@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router'
 import { Alert, Button, Paper, Stack, Tab, Tabs, TextField, Typography } from '@mui/material'
 import { supabase } from '#/lib/supabase/client'
 import { errorMessage } from '#/lib/errors'
+import { loginIdentifier } from '#/lib/phoneLogin'
 import { useI18n } from '#/i18n/i18n'
 import { OnboardingShell } from '#/components/OnboardingShell'
 import { tokens } from '#/theme/theme'
@@ -32,7 +33,7 @@ function LoginPage() {
     setError(null)
     const res =
       mode === 'signin'
-        ? await supabase.auth.signInWithPassword({ email, password })
+        ? await supabase.auth.signInWithPassword({ email: loginIdentifier(email), password })
         : await supabase.auth.signUp({
             email,
             password,
@@ -70,12 +71,12 @@ function LoginPage() {
             />
           )}
           <TextField
-            label={t('auth.email')}
-            type="email"
+            label={mode === 'signin' ? t('auth.emailOrPhone') : t('auth.email')}
+            type={mode === 'signin' ? 'text' : 'email'}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            autoComplete="email"
+            autoComplete={mode === 'signin' ? 'username' : 'email'}
             slotProps={{ htmlInput: { dir: 'ltr' } }}
           />
           <TextField
