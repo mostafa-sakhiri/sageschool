@@ -48,6 +48,29 @@ export const assignmentsQuery = (schoolId: string, classId: string) =>
       ),
   })
 
+// For each class of a year: how many of its subjects have a teacher.
+// Keyed under 'assignments' so saving an assignment refreshes it.
+export const teacherCoverageQuery = (schoolId: string, classIds: string[]) =>
+  queryOptions({
+    queryKey: ['school', schoolId, 'assignments', 'coverage', classIds.join()],
+    enabled: classIds.length > 0,
+    queryFn: async () => {
+      const [hours, assigned] = await Promise.all([
+        supabase.from('class_required_hours').select('class_id, subject_id').in('class_id', classIds),
+        supabase.from('teaching_assignments').select('class_id, subject_id').in('class_id', classIds),
+      ])
+      const has = new Set(must(assigned).map((a) => `${a.class_id}|${a.subject_id}`))
+      const out: Record<string, { total: number; done: number }> = {}
+      for (const h of must(hours)) {
+        if (!h.class_id || !h.subject_id) continue
+        const c = (out[h.class_id] ??= { total: 0, done: 0 })
+        c.total++
+        if (has.has(`${h.class_id}|${h.subject_id}`)) c.done++
+      }
+      return out
+    },
+  })
+
 export const teachersQuery = (schoolId: string) =>
   queryOptions({
     queryKey: ['school', schoolId, 'teachers'],

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type PointerEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import {
   Alert,
   Box,
@@ -24,6 +25,7 @@ import ContentCopyOutlined from '@mui/icons-material/ContentCopyOutlined'
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined'
 import DragIndicatorOutlined from '@mui/icons-material/DragIndicatorOutlined'
 import EditOutlined from '@mui/icons-material/EditOutlined'
+import AssignmentIndOutlined from '@mui/icons-material/AssignmentIndOutlined'
 import EditCalendarOutlined from '@mui/icons-material/EditCalendarOutlined'
 import LockOutlined from '@mui/icons-material/LockOutlined'
 import { useSchool } from '#/lib/session'
@@ -226,6 +228,7 @@ function VersionEditor({ classId, version, onOpenVersion }: { classId: string; v
   const teacherIds = [...new Set((assignments.data ?? []).map((a) => a.teacher_member_id))].sort()
   const busy = useQuery(teachersBusyQuery(ctx.school.id, classId, teacherIds, version.effective_from, version.effective_to))
   const [edit, setEdit] = useState<Partial<Slot> | null>(null)
+  const navigate = useNavigate()
   const [menu, setMenu] = useState<{ id: string; anchor: HTMLElement } | null>(null)
   const [toast, setToast] = useState<{ message: string; undo?: () => Promise<unknown>; error?: boolean; n: number } | null>(null)
   const editable = version.status === 'draft'
@@ -414,6 +417,7 @@ function VersionEditor({ classId, version, onOpenVersion }: { classId: string; v
 
   if (slots.isError) return <ErrorState error={slots.error} onRetry={() => slots.refetch()} />
 
+  const missingTeachers = (required.data ?? []).filter((r) => r.subject_id && !teacherOf(r.subject_id)).length
   const coverage = (startDrag?: (e: PointerEvent, item: NewItem) => void) => (
     <Paper variant="outlined" sx={{ p: 2, alignSelf: 'start', position: { lg: 'sticky' }, top: { lg: 16 } }}>
       <Typography variant="h5" sx={{ mb: 0.5 }}>
@@ -471,11 +475,32 @@ function VersionEditor({ classId, version, onOpenVersion }: { classId: string; v
                   {done ? `✓ ${formatMinutes(p, locale)}` : startDrag ? t('tt.left', { time: formatMinutes(left, locale) }) : `${formatMinutes(p, locale)} / ${formatMinutes(need, locale)}`}
                 </Typography>
               </Stack>
+              {(() => {
+                const tid = teacherOf(r.subject_id!)
+                return (
+                  <Typography noWrap sx={{ fontSize: 11.5, mt: 0.25, color: tid ? tokens.inkMuted : tokens.warnInk, fontWeight: tid ? 400 : 600 }}>
+                    {tid ? (names.data?.[tid] ?? '—') : t('tt.noTeacher')}
+                  </Typography>
+                )
+              })()}
               <LinearProgress variant="determinate" value={Math.min(100, (p / (need || 1)) * 100)} sx={{ height: 4, borderRadius: 3, mt: 0.5 }} />
             </Box>
           )
         })}
       </Stack>
+      {(required.data ?? []).length > 0 && (
+        <Button
+          fullWidth
+          size="small"
+          variant={missingTeachers ? 'contained' : 'outlined'}
+          color={missingTeachers ? 'warning' : 'primary'}
+          startIcon={<AssignmentIndOutlined />}
+          onClick={() => navigate({ to: '/classes', search: { assign: classId } })}
+          sx={{ mt: 1.5 }}
+        >
+          {missingTeachers ? t('tt.assignMissing', { n: missingTeachers }) : t('tt.assignTeachers')}
+        </Button>
+      )}
     </Paper>
   )
 

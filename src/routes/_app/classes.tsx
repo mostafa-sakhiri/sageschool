@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -26,6 +26,7 @@ import {
 import AddOutlined from '@mui/icons-material/AddOutlined'
 import RemoveOutlined from '@mui/icons-material/RemoveOutlined'
 import CloseOutlined from '@mui/icons-material/CloseOutlined'
+import AssignmentIndOutlined from '@mui/icons-material/AssignmentIndOutlined'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, Tag } from '#/components/ui'
 import { EmptyState, Loading, ErrorState } from '#/components/states'
@@ -47,12 +48,18 @@ import {
   assignmentsQuery,
   classesQuery,
   requiredHoursQuery,
+  teacherCoverageQuery,
   teachersQuery,
   type ClassRow,
 } from '#/features/classes/api'
 import { tokens } from '#/theme/theme'
 
 export const Route = createFileRoute('/_app/classes')({
+  // ?assign=<class id> opens that class's subjects and teachers (links from
+  // the timetable editor)
+  validateSearch: (s: Record<string, unknown>): { assign?: string } => ({
+    assign: typeof s.assign === 'string' ? s.assign : undefined,
+  }),
   loader: ({ context }) =>
     context.schoolId && context.queryClient.prefetchQuery(nodesQuery(context.schoolId)),
   component: ClassesPage,
@@ -69,6 +76,18 @@ function ClassesPage() {
   const [openClass, setOpenClass] = useState<ClassRow | null>(null)
 
   const leaves = useMemo(() => leafNodes(nodes.data ?? []), [nodes.data])
+  const coverage = useQuery(teacherCoverageQuery(ctx.school.id, (classes.data ?? []).map((c) => c.id)))
+  const { assign } = Route.useSearch()
+  const navigateSelf = Route.useNavigate()
+  useEffect(() => {
+    if (!assign || !classes.data) return
+    const c = classes.data.find((x) => x.id === assign)
+    if (c) {
+      setSelected(c.node_id)
+      setOpenClass(c)
+    }
+    navigateSelf({ search: {}, replace: true })
+  }, [assign, classes.data, navigateSelf])
 
   if (!ctx.year)
     return (
@@ -122,6 +141,7 @@ function ClassesPage() {
               node={current}
               nodes={nodes.data ?? []}
               classes={byNode(current.id)}
+              coverage={coverage.data ?? {}}
               onOpen={setOpenClass}
             />
           )}
@@ -144,11 +164,13 @@ function LevelPanel({
   nodes,
   classes,
   onOpen,
+  coverage,
 }: {
   node: Node
   nodes: Node[]
   classes: ClassRow[]
   onOpen: (c: ClassRow) => void
+  coverage: Record<string, { total: number; done: number }>
 }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
@@ -280,14 +302,30 @@ function LevelPanel({
               <Typography sx={{ fontSize: 13, color: tokens.inkMuted, minWidth: 80 }}>
                 {t('classes.students', { n: c.enrollments?.[0]?.count ?? 0 })}
               </Typography>
-              <Button size="small" onClick={() => onOpen(c)}>
-                {t('classes.subjectsTeachers')}
-              </Button>
+              <TeachersButton coverage={coverage[c.id]} onClick={() => onOpen(c)} />
             </Stack>
           ))}
         </Stack>
       )}
     </Paper>
+  )
+}
+
+// Subjects and teachers of a class: the way to assign teachers, with how many
+// subjects still have none (in orange)
+function TeachersButton({ coverage, onClick }: { coverage?: { total: number; done: number }; onClick: () => void }) {
+  const { t } = useI18n()
+  const missing = !!coverage && coverage.done < coverage.total
+  return (
+    <Button
+      variant={missing ? 'contained' : 'outlined'}
+      color={missing ? 'warning' : 'primary'}
+      startIcon={<AssignmentIndOutlined />}
+      onClick={onClick}
+      sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+    >
+      {coverage?.total ? t('classes.teachersButton', { done: coverage.done, total: coverage.total }) : t('classes.subjectsTeachers')}
+    </Button>
   )
 }
 
@@ -332,7 +370,8 @@ function ClassDetail({ cls, onClose }: { cls: ClassRow; onClose: () => void }) {
           }),
         )
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'assignments', cls.id] }),
+    // Prefix: this class's assignments and every class's coverage
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'assignments'] }),
   })
 
   const subjectName = (id: string) => subjects.data?.find((s) => s.id === id)?.name ?? '—'
