@@ -24,6 +24,8 @@ import ContentCopyOutlined from '@mui/icons-material/ContentCopyOutlined'
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined'
 import DragIndicatorOutlined from '@mui/icons-material/DragIndicatorOutlined'
 import EditOutlined from '@mui/icons-material/EditOutlined'
+import EditCalendarOutlined from '@mui/icons-material/EditCalendarOutlined'
+import LockOutlined from '@mui/icons-material/LockOutlined'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
@@ -40,6 +42,9 @@ import { useSchoolDays } from './RealWeek'
 import { dayOf, firstFree, fromMin, slotIssues, weeklyTeachable } from '#/features/setup/schedule'
 import { pauseLabel } from '#/features/setup/ScheduleEditor'
 import { tokens } from '#/theme/theme'
+import { placement, toPSlot, type Env } from './plan'
+import { describeIssue } from './describe'
+import { useAssistantSlot } from '#/features/assistant/shell'
 
 const toMin = (t: string) => {
   const [h, m] = t.split(':').map(Number)
@@ -145,16 +150,31 @@ export function Builder({ classId }: { classId: string }) {
               </Button>
             </>
           )}
-          {current?.status === 'published' && (
-            <Button variant="outlined" onClick={() => setForkOpen(true)}>
+        </Stack>
+        {/* A published version is locked: changing it starts with a new
+            version, the one way forward, so it gets the page's main button */}
+        {current?.status === 'published' && (
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1.5}
+            sx={{
+              mt: 1.5,
+              p: 1.5,
+              pl: 2,
+              alignItems: { sm: 'center' },
+              borderRadius: 2,
+              bgcolor: tokens.accentSoft,
+              border: `1px solid ${tokens.accentLine}`,
+            }}
+          >
+            <LockOutlined sx={{ color: tokens.accentDark, fontSize: 20, display: { xs: 'none', sm: 'block' } }} />
+            <Typography variant="body2" sx={{ flex: 1, color: tokens.accentDark }}>
+              {t('tt.publishedHint')}
+            </Typography>
+            <Button variant="contained" size="large" startIcon={<EditCalendarOutlined />} onClick={() => setForkOpen(true)} sx={{ flexShrink: 0, alignSelf: { xs: 'stretch', sm: 'center' } }}>
               {t('tt.newVersion')}
             </Button>
-          )}
-        </Stack>
-        {current?.status === 'published' && (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            {t('tt.publishedHint')}
-          </Typography>
+          </Stack>
         )}
         {(publish.isError || discard.isError || createFirst.isError) && (
           <Alert severity="error" sx={{ mt: 1.5 }}>
@@ -162,7 +182,16 @@ export function Builder({ classId }: { classId: string }) {
           </Alert>
         )}
       </Paper>
-      {current && <VersionEditor classId={classId} version={current} />}
+      {current && (
+        <VersionEditor
+          classId={classId}
+          version={current}
+          onOpenVersion={async (id) => {
+            await invalidate()
+            setVersionId(id)
+          }}
+        />
+      )}
       {forkOpen && current && (
         <ForkDialog
           classId={classId}
@@ -182,7 +211,7 @@ function StatusTag({ v }: { v: Version }) {
   return <Tag tone={v.status === 'published' ? 'ok' : v.status === 'draft' ? 'warn' : 'neutral'} label={t(`tt.status.${v.status}`)} />
 }
 
-function VersionEditor({ classId, version }: { classId: string; version: Version }) {
+function VersionEditor({ classId, version, onOpenVersion }: { classId: string; version: Version; onOpenVersion: (id: string) => Promise<void> }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
@@ -346,22 +375,43 @@ function VersionEditor({ classId, version }: { classId: string; version: Version
     return () => window.removeEventListener('keydown', onKey)
   }, [toast])
 
-  // Can a session of `teacherId` sit at `p`? Pauses only warn.
+  // Can a session of `teacherId` sit at `p`? Pauses only warn (rules in plan.ts,
+  // shared with the assistant).
+  const pslots = useMemo(() => list.map(toPSlot), [list])
+  const env: Env = { horaire, busy: busy.data ?? [] }
   const check = (p: Place, ignoreId: string | null, teacherId: string | null): Verdict => {
-    const issues = slotIssues(horaire, p.weekday, p.start, p.end)
-    if (issues.closed) return { level: 'bad', message: t('tt.dayClosed') }
-    if (issues.outside) return { level: 'bad', message: t('tt.outsideDay') }
-    const a = toMin(p.start)
-    const b = toMin(p.end)
-    const hit = list.find((s) => s.id !== ignoreId && s.weekday === p.weekday && toMin(s.starts_at) < b && a < toMin(s.ends_at))
-    if (hit) return { level: 'bad', message: t('tt.overlaps', { name: hit.title || subjectName(hit.subject_id) || '—' }) }
-    const other = teacherId && busy.data?.find((x) => x.teacherId === teacherId && x.weekday === p.weekday && toMin(x.start) < b && a < toMin(x.end))
-    if (other) return { level: 'bad', message: t('tt.teacherBusy', { name: names.data?.[teacherId!] ?? '', class: other.label }) }
-    if (issues.pauses.length) return { level: 'warn', message: t('tt.overPause', { pauses: issues.pauses.map((x) => pauseLabel(x, t)).join(', ') }) }
-    return { level: 'ok' }
+    const v = placement(env, pslots, p, ignoreId, teacherId)
+    if (v.level === 'ok') return v
+    return { level: v.level, message: describeIssue(v, { t, subjectName, teacherName: (id) => names.data?.[id] }) }
   }
 
+  // The assistant reads this version and, on a draft, changes it (office only)
+  useAssistantSlot(
+    'timetable',
+    slots.data
+      ? {
+          classId,
+          version,
+          slots: list,
+          env,
+          horaire,
+          days,
+          labels,
+          dayStart: start,
+          dayEnd: end,
+          bands,
+          subjects: subjects.data ?? [],
+          rooms: rooms.data ?? [],
+          names: names.data ?? {},
+          assignments: assignments.data ?? [],
+          required: required.data ?? [],
+          openVersion: onOpenVersion,
+        }
+      : undefined,
+  )
+
   if (slots.isPending) return <Loading rows={4} />
+
   if (slots.isError) return <ErrorState error={slots.error} onRetry={() => slots.refetch()} />
 
   const coverage = (startDrag?: (e: PointerEvent, item: NewItem) => void) => (
@@ -441,7 +491,7 @@ function VersionEditor({ classId, version }: { classId: string; version: Version
     }))
     return (
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: '1fr 300px' } }}>
-        <WeekGrid days={days} dayLabels={labels} blocks={blocks} bands={bands} dayRanges={dayRanges} dayStart={start} dayEnd={end} emptyText={t('tt.emptyVersion')} />
+          <WeekGrid days={days} dayLabels={labels} blocks={blocks} bands={bands} dayRanges={dayRanges} dayStart={start} dayEnd={end} emptyText={t('tt.emptyVersion')} />
         {coverage()}
       </Box>
     )

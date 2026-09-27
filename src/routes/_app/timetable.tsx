@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { MenuItem, Stack, Tab, Tabs, TextField, Typography } from '@mui/material'
 import { AppShell } from '#/components/AppShell'
+import { useAssistantUi } from '#/features/assistant/shell'
 import { PageIntro, fullName } from '#/components/ui'
 import { EmptyState, ErrorState, Loading } from '#/components/states'
 import { useSchool } from '#/lib/session'
@@ -30,8 +31,17 @@ export const Route = createFileRoute('/_app/timetable')({
 function TimetablePage() {
   const { t } = useI18n()
   const ctx = useSchool()
+  const search = Route.useSearch()
+  const assistant = useAssistantUi()
+  // The editor (admin, default tab) needs the width and works with the
+  // assistant: the sidebar folds and the assistant opens on entering it.
+  const editing = ctx.isAdmin && (search.mode ?? 'edit') === 'edit'
+  const openAssistant = assistant?.setOpen
+  useEffect(() => {
+    if (editing) openAssistant?.(true)
+  }, [editing, openAssistant])
   return (
-    <AppShell title={t('nav.timetable')}>
+    <AppShell title={t('nav.timetable')} compactNav={editing}>
       {ctx.isOffice ? <OfficeView /> : ctx.role === 'teacher' ? <TeacherView memberId={ctx.member.id} /> : <FamilyView />}
     </AppShell>
   )

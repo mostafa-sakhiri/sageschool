@@ -5,6 +5,7 @@ import {
   Avatar,
   Box,
   Button,
+  ButtonBase,
   Drawer,
   IconButton,
   ListItemIcon,
@@ -39,6 +40,8 @@ import SwapHorizOutlined from '@mui/icons-material/SwapHorizOutlined'
 import CheckOutlined from '@mui/icons-material/CheckOutlined'
 import LightModeOutlined from '@mui/icons-material/LightModeOutlined'
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined'
+import ChevronLeftOutlined from '@mui/icons-material/ChevronLeftOutlined'
+import ChevronRightOutlined from '@mui/icons-material/ChevronRightOutlined'
 import { useI18n } from '#/i18n/i18n'
 import { rememberRole, rememberSchool, useSchool, type Role, type SchoolCtx } from '#/lib/session'
 import { supabase } from '#/lib/supabase/client'
@@ -48,6 +51,8 @@ import { ContactDialog } from '#/features/team/ContactDialog'
 import { formatPhone } from '#/lib/format'
 import ContactPhoneOutlined from '@mui/icons-material/ContactPhoneOutlined'
 import { QuickActions } from './QuickActions'
+import AutoAwesomeOutlined from '@mui/icons-material/AutoAwesomeOutlined'
+import { useAssistantUi } from '#/features/assistant/shell'
 
 type NavItem = { to: string; key: string; icon: React.ReactNode; roles: Role[]; when?: (ctx: SchoolCtx) => boolean }
 
@@ -68,23 +73,36 @@ const NAV: NavItem[] = [
 ]
 
 export const SIDEBAR_WIDTH = 236
+// Folded sidebar: icons only (pages that need the width, e.g. the timetable editor)
+export const RAIL_WIDTH = 60
 
 const visuallyHidden = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' } as const
 
-export function AppShell({ title, children }: { title?: string; children: React.ReactNode }) {
+// `compactNav`: the page asks for the folded sidebar; the person can still
+// unfold it (until they leave the page).
+export function AppShell({ title, children, compactNav }: { title?: string; children: React.ReactNode; compactNav?: boolean }) {
   const theme = useTheme()
   const desktop = useMediaQuery(theme.breakpoints.up('md'))
   const [open, setOpen] = useState(false)
+  const [unfolded, setUnfolded] = useState(false)
+  const compact = desktop && !!compactNav && !unfolded
   const { t } = useI18n()
+  const assistant = useAssistantUi()
 
-  const sidebar = <Sidebar onNavigate={() => setOpen(false)} />
+  const sidebar = (
+    <Sidebar
+      onNavigate={() => setOpen(false)}
+      compact={compact}
+      onFold={desktop && compactNav ? () => setUnfolded(!unfolded) : undefined}
+    />
+  )
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: tokens.paper }}>
       {desktop ? (
         <Box
           component="nav"
           aria-label={t('nav.main')}
-          sx={{ width: SIDEBAR_WIDTH, flexShrink: 0, position: 'sticky', top: 0, height: '100vh' }}
+          sx={{ width: compact ? RAIL_WIDTH : SIDEBAR_WIDTH, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', transition: 'width 180ms ease' }}
         >
           {sidebar}
         </Box>
@@ -128,13 +146,75 @@ export function AppShell({ title, children }: { title?: string; children: React.
             <Typography component="h1" variant="h4" noWrap sx={{ flex: 1, minWidth: 0 }}>
               {title}
             </Typography>
+            {assistant && (
+              <IconButton aria-label={t('assistant.title')} onClick={() => assistant.setOpen(!assistant.open)} sx={{ color: tokens.accent }}>
+                <AutoAwesomeOutlined />
+              </IconButton>
+            )}
           </Box>
         )}
         <Box component="main" sx={{ flex: 1, minWidth: 0, p: { xs: 2, md: 4 }, pt: { md: 4.5 } }}>
           {children}
         </Box>
       </Box>
+      {/* The assistant's column: the chat is part of the page, next to it */}
+      {assistant && desktop && (
+        <Box
+          ref={assistant.dock}
+          sx={{ width: assistant.width, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', display: assistant.open ? 'block' : 'none' }}
+        />
+      )}
     </Box>
+  )
+}
+
+const navItemSx = (on: boolean, compact: boolean) => ({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: compact ? 'center' : 'flex-start',
+  gap: 1.25,
+  minHeight: 32,
+  width: compact ? 36 : 'auto',
+  px: compact ? 0 : 1,
+  borderRadius: '7px',
+  fontSize: 13.5,
+  textDecoration: 'none',
+  color: on ? tokens.ink : tokens.sidebarInk,
+  bgcolor: on ? tokens.sidebarActive : 'transparent',
+  boxShadow: on ? tokens.shadowSm : 'none',
+  fontWeight: on ? 500 : 400,
+  transition: 'background-color 100ms, color 100ms',
+  '&:hover': { bgcolor: on ? tokens.sidebarActive : tokens.sidebarHover, color: tokens.ink },
+  '& svg': { fontSize: 17, color: on ? tokens.accent : tokens.sidebarMuted },
+  '&:focus-visible': { outline: `2px solid ${tokens.accentLine}`, outlineOffset: 2 },
+})
+
+// The assistant, first entry of the nav (office roles): shows or hides its
+// column; highlighted while open, its icon always in the accent colour.
+function AssistantNavItem({ onDone, compact }: { onDone: () => void; compact: boolean }) {
+  const assistant = useAssistantUi()
+  const { t } = useI18n()
+  if (!assistant) return null
+  const item = (
+    <ButtonBase
+      onClick={() => {
+        assistant.setOpen(!assistant.open)
+        onDone()
+      }}
+      aria-pressed={assistant.open}
+      aria-label={compact ? t('assistant.title') : undefined}
+      sx={{ ...navItemSx(assistant.open, compact), fontFamily: 'inherit', '& svg': { fontSize: 17, color: tokens.accent } }}
+    >
+      <AutoAwesomeOutlined />
+      {!compact && t('assistant.title')}
+    </ButtonBase>
+  )
+  return compact ? (
+    <Tooltip title={t('assistant.title')} placement="right">
+      {item}
+    </Tooltip>
+  ) : (
+    item
   )
 }
 
@@ -173,11 +253,13 @@ export function LanguageToggle() {
   )
 }
 
-function Sidebar({ onNavigate }: { onNavigate: () => void }) {
-  const { t } = useI18n()
+function Sidebar({ onNavigate, compact, onFold }: { onNavigate: () => void; compact: boolean; onFold?: () => void }) {
+  const { t, dir } = useI18n()
   const ctx = useSchool()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const items = NAV.filter((n) => n.roles.includes(ctx.role) && (!n.when || n.when(ctx)))
+  // Chevron towards where the sidebar would grow or shrink (mirrored in RTL)
+  const unfoldIcon = (compact ? dir !== 'rtl' : dir === 'rtl') ? <ChevronRightOutlined fontSize="small" /> : <ChevronLeftOutlined fontSize="small" />
 
   return (
     <Box
@@ -185,63 +267,70 @@ function Sidebar({ onNavigate }: { onNavigate: () => void }) {
         height: '100%',
         bgcolor: tokens.sidebar,
         borderInlineEnd: `1px solid ${tokens.line}`,
-        px: 1.25,
+        px: compact ? 1 : 1.25,
         py: 1.5,
         display: 'flex',
         flexDirection: 'column',
+        alignItems: compact ? 'center' : 'stretch',
         overflowY: 'auto',
+        overflowX: 'hidden',
       }}
     >
-      <ContextSwitcher />
-      <QuickActions onDone={onNavigate} />
+      {onFold && (
+        <Tooltip title={compact ? t('shell.unfoldNav') : t('shell.foldNav')} placement="right">
+          <IconButton size="small" onClick={onFold} aria-label={compact ? t('shell.unfoldNav') : t('shell.foldNav')} sx={{ alignSelf: compact ? 'center' : 'flex-end', mb: 1 }}>
+            {unfoldIcon}
+          </IconButton>
+        </Tooltip>
+      )}
+      {!compact && <ContextSwitcher />}
+      <QuickActions onDone={onNavigate} compact={compact} />
 
-      <Stack spacing={0.25}>
+      <Stack spacing={0.25} sx={{ alignItems: compact ? 'center' : 'stretch' }}>
+        <AssistantNavItem onDone={onNavigate} compact={compact} />
         {items.map((n) => {
           const on = n.to === '/' ? pathname === '/' : pathname.startsWith(n.to)
-          return (
+          const link = (
             <Box
               key={n.to}
               component={Link}
               to={n.to}
               onClick={onNavigate}
               aria-current={on ? 'page' : undefined}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.25,
-                minHeight: 32,
-                px: 1,
-                borderRadius: '7px',
-                fontSize: 13.5,
-                textDecoration: 'none',
-                color: on ? tokens.ink : tokens.sidebarInk,
-                bgcolor: on ? tokens.sidebarActive : 'transparent',
-                boxShadow: on ? tokens.shadowSm : 'none',
-                fontWeight: on ? 500 : 400,
-                transition: 'background-color 100ms, color 100ms',
-                '&:hover': { bgcolor: on ? tokens.sidebarActive : tokens.sidebarHover, color: tokens.ink },
-                '& svg': { fontSize: 17, color: on ? tokens.accent : tokens.sidebarMuted },
-                '&:focus-visible': { outline: `2px solid ${tokens.accentLine}`, outlineOffset: 2 },
-              }}
+              aria-label={compact ? t(n.key) : undefined}
+              sx={navItemSx(on, compact)}
             >
               {n.icon}
-              {t(n.key)}
+              {!compact && t(n.key)}
             </Box>
+          )
+          return compact ? (
+            <Tooltip key={n.to} title={t(n.key)} placement="right">
+              {link}
+            </Tooltip>
+          ) : (
+            link
           )
         })}
       </Stack>
 
       <Box sx={{ flex: 1 }} />
-      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', px: 0.5, pt: 1.5, borderTop: `1px solid ${tokens.line}` }}>
-        <LanguageToggle />
-        <ThemeToggle />
-      </Stack>
-      <UserCard />
+      {compact ? (
+        <Box sx={{ pt: 1.5, borderTop: `1px solid ${tokens.line}`, alignSelf: 'stretch', display: 'flex', justifyContent: 'center' }}>
+          <ThemeToggle />
+        </Box>
+      ) : (
+        <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', px: 0.5, pt: 1.5, borderTop: `1px solid ${tokens.line}` }}>
+          <LanguageToggle />
+          <ThemeToggle />
+        </Stack>
+      )}
+      <UserCard compact={compact} />
     </Box>
   )
 }
 
-function UserCard() {
+function UserCard({ compact }: { compact?: boolean }) {
   const { t } = useI18n()
   const ctx = useSchool()
   const navigate = useNavigate()
@@ -278,7 +367,8 @@ function UserCard() {
           onClick={(e) => setAnchor(e.currentTarget)}
           sx={{
             mt: 1,
-            justifyContent: 'flex-start',
+            minWidth: 0,
+            justifyContent: compact ? 'center' : 'flex-start',
             gap: 1.25,
             p: 0.75,
             borderRadius: '8px',
@@ -290,7 +380,7 @@ function UserCard() {
           <Avatar sx={{ width: 28, height: 28, bgcolor: tokens.accentSoft, color: tokens.accentDark, fontSize: 11, fontWeight: 600 }}>
             {initials}
           </Avatar>
-          <Box sx={{ minWidth: 0 }}>
+          <Box sx={{ minWidth: 0, display: compact ? 'none' : 'block' }}>
             <Typography noWrap dir="auto" sx={{ fontSize: 13, fontWeight: 500 }}>
               {ctx.user.full_name}
             </Typography>

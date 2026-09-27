@@ -24,6 +24,7 @@ import { announcementsQuery, balancesQuery, casesQuery, homeworkQuery } from '#/
 import { subjectTokens, tokens } from '#/theme/theme'
 import { ParentNotified } from '#/features/attendance/ParentNotified'
 import { guardiansToRecipients } from '#/components/WhatsApp'
+import { AssistantInput } from '#/features/assistant/AssistantInput'
 
 export const Route = createFileRoute('/_app/')({ component: Dashboard })
 
@@ -37,6 +38,7 @@ function Dashboard() {
         title={t('dash.hello', { name: first })}
         subtitle={formatDate(todayIso(), locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
       />
+      {ctx.isOffice && <AssistantInput />}
       {ctx.isOffice ? <OfficeDash /> : ctx.role === 'teacher' ? <TeacherDash /> : ctx.role === 'parent' ? <ParentDash /> : <StudentDash />}
     </AppShell>
   )

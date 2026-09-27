@@ -3,10 +3,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   MenuItem,
   Stack,
   TextField,
@@ -18,6 +14,7 @@ import { errorMessage } from '#/lib/errors'
 import { normalizePhone } from '#/lib/format'
 import type { Role } from '#/lib/session'
 import { tokens } from '#/theme/theme'
+import { SurfaceActions, SurfaceContent, SurfaceDialog, SurfaceTitle } from '#/components/Surface'
 
 export type InviteResult = { memberId: string; userId: string; password: string | null }
 
@@ -31,6 +28,9 @@ export function InviteDialog({
   title,
   studentId,
   defaultName = '',
+  defaultEmail = '',
+  defaultPhone = '',
+  defaultRole,
   onCreated,
 }: {
   open: boolean
@@ -40,14 +40,17 @@ export function InviteDialog({
   title: string
   studentId?: string
   defaultName?: string
+  defaultEmail?: string
+  defaultPhone?: string
+  defaultRole?: Role
   onCreated?: (r: InviteResult) => void | Promise<void>
 }) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const [fullName, setFullName] = useState(defaultName)
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [role, setRole] = useState<Role>(roles[0])
+  const [email, setEmail] = useState(defaultEmail)
+  const [phone, setPhone] = useState(defaultPhone)
+  const [role, setRole] = useState<Role>(defaultRole && roles.includes(defaultRole) ? defaultRole : roles[0])
   const [password, setPassword] = useState('')
   const [result, setResult] = useState<InviteResult | null>(null)
 
@@ -71,11 +74,11 @@ export function InviteDialog({
   }
 
   return (
-    <Dialog open={open} onClose={close} fullWidth maxWidth="sm">
-      <DialogTitle>{title}</DialogTitle>
+    <SurfaceDialog open={open} onClose={close} fullWidth maxWidth="sm">
+      <SurfaceTitle>{title}</SurfaceTitle>
       {result ? (
         <>
-          <DialogContent>
+          <SurfaceContent>
             <Alert severity="success" sx={{ mb: 2 }}>
               {t('team.created', { name: fullName })}
             </Alert>
@@ -92,12 +95,12 @@ export function InviteDialog({
             ) : (
               <Typography>{t('team.existingAccount')}</Typography>
             )}
-          </DialogContent>
-          <DialogActions>
+          </SurfaceContent>
+          <SurfaceActions>
             <Button variant="contained" onClick={close}>
               {t('common.close')}
             </Button>
-          </DialogActions>
+          </SurfaceActions>
         </>
       ) : (
         <form
@@ -106,7 +109,7 @@ export function InviteDialog({
             invite.mutate()
           }}
         >
-          <DialogContent>
+          <SurfaceContent>
             <Stack spacing={2} sx={{ pt: 1 }}>
               <TextField label={t('auth.fullName')} value={fullName} onChange={(e) => setFullName(e.target.value)} required autoFocus />
               <TextField
@@ -143,15 +146,15 @@ export function InviteDialog({
               />
               {invite.isError && <Alert severity="error">{errorMessage(invite.error, t)}</Alert>}
             </Stack>
-          </DialogContent>
-          <DialogActions>
+          </SurfaceContent>
+          <SurfaceActions>
             <Button onClick={close}>{t('common.cancel')}</Button>
             <Button type="submit" variant="contained" loading={invite.isPending} disabled={!fullName.trim() || !email}>
               {t('common.create')}
             </Button>
-          </DialogActions>
+          </SurfaceActions>
         </form>
       )}
-    </Dialog>
+    </SurfaceDialog>
   )
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { Button, ListItemIcon, ListItemText, Menu, MenuItem } from '@mui/material'
+import { Button, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip } from '@mui/material'
 import AddOutlined from '@mui/icons-material/AddOutlined'
 import FaceOutlined from '@mui/icons-material/FaceOutlined'
 import EventOutlined from '@mui/icons-material/EventOutlined'
@@ -15,6 +15,7 @@ import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
 import HowToRegOutlined from '@mui/icons-material/HowToRegOutlined'
 import EventNoteOutlined from '@mui/icons-material/EventNoteOutlined'
 import { useI18n } from '#/i18n/i18n'
+import { tokens } from '#/theme/theme'
 import { useSchool, type Role } from '#/lib/session'
 import { AddStudentDialog } from '#/features/students/AddStudentDialog'
 import { InviteDialog } from '#/features/team/InviteDialog'
@@ -57,7 +58,7 @@ const ACTIONS: Action[] = [
 
 // Lives in the sidebar, under the school/year switcher. `onDone` closes the
 // mobile drawer once an action is chosen.
-export function QuickActions({ onDone }: { onDone?: () => void }) {
+export function QuickActions({ onDone, compact }: { onDone?: () => void; compact?: boolean }) {
   const { t } = useI18n()
   const ctx = useSchool()
   const navigate = useNavigate()
@@ -76,20 +77,33 @@ export function QuickActions({ onDone }: { onDone?: () => void }) {
 
   return (
     <>
-      <Button
-        fullWidth
-        variant="contained"
-        startIcon={<AddOutlined />}
-        onClick={(e) => setAnchor(e.currentTarget)}
-        aria-haspopup="menu"
-        sx={{
-          mb: 1.5,
-          justifyContent: 'flex-start',
-          px: 1.25,
-        }}
-      >
-        {t('quick.new')}
-      </Button>
+      {compact ? (
+        <Tooltip title={t('quick.new')} placement="right">
+          <IconButton
+            onClick={(e) => setAnchor(e.currentTarget)}
+            aria-haspopup="menu"
+            aria-label={t('quick.new')}
+            sx={{ mb: 1.5, bgcolor: tokens.accent, color: '#fff', borderRadius: '8px', '&:hover': { bgcolor: tokens.accentHover } }}
+          >
+            <AddOutlined fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      ) : (
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<AddOutlined />}
+          onClick={(e) => setAnchor(e.currentTarget)}
+          aria-haspopup="menu"
+          sx={{
+            mb: 1.5,
+            justifyContent: 'flex-start',
+            px: 1.25,
+          }}
+        >
+          {t('quick.new')}
+        </Button>
+      )}
       <Menu
         anchorEl={anchor}
         open={!!anchor}

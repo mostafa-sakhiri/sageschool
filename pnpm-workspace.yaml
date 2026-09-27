@@ -1,0 +1,13 @@
+allowBuilds:
+  '@scarf/scarf': set this to true or false
+  esbuild: true
+minimumReleaseAgeExclude:
+  - '@copilotkit/a2ui-renderer@1.74.0'
+  - '@copilotkit/core@1.74.0'
+  - '@copilotkit/mcp-apps-renderer@1.74.0'
+  - '@copilotkit/react-core@1.74.0'
+  - '@copilotkit/runtime-client-gql@1.74.0'
+  - '@copilotkit/runtime@1.74.0'
+  - '@copilotkit/shared@1.74.0'
+  - '@copilotkit/web-components@1.74.0'
+  - '@copilotkit/web-inspector@1.74.0'

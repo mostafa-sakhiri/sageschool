@@ -16,6 +16,7 @@ import { ErrorState, FullPageLoading } from '#/components/states'
 import { OnboardingShell } from '#/components/OnboardingShell'
 import { useT } from '#/i18n/i18n'
 import { Typography } from '@mui/material'
+import { AssistantProvider } from '#/features/assistant/shell'
 
 // Protected layout. beforeLoad only gates rendering; every privileged read or
 // write is enforced again by RLS (browser client) or by getClaims() inside the
@@ -87,7 +88,9 @@ function AppLayout() {
   }
   return (
     <SchoolContext.Provider value={ctx}>
-      <Outlet />
+      <AssistantProvider>
+        <Outlet />
+      </AssistantProvider>
     </SchoolContext.Provider>
   )
 }

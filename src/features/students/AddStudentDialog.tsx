@@ -5,10 +5,6 @@ import {
   Box,
   Button,
   Checkbox,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Divider,
   FormControlLabel,
   MenuItem,
@@ -23,8 +19,16 @@ import { errorMessage, must } from '#/lib/errors'
 import { formatMoney, todayIso } from '#/lib/format'
 import { classesQuery } from '#/features/classes/api'
 import { tokens } from '#/theme/theme'
+import { SurfaceActions, SurfaceContent, SurfaceDialog, SurfaceTitle } from '#/components/Surface'
 
-export type StudentPrefill = { first?: string; last?: string; birth?: string; preinscriptionId?: string }
+export type StudentPrefill = {
+  first?: string
+  last?: string
+  birth?: string
+  gender?: 'female' | 'male'
+  classId?: string
+  preinscriptionId?: string
+}
 
 type Month = { key: string; due: string; label: string }
 
@@ -89,6 +93,8 @@ export function AddStudentDialog({
     setFirst(prefill?.first ?? '')
     setLast(prefill?.last ?? '')
     setBirth(prefill?.birth ?? '')
+    setGender(prefill?.gender ?? '')
+    setClassId(prefill?.classId ?? '')
     setYearId(ctx.year?.id ?? '')
   }, [open, prefill, ctx.year?.id])
 
@@ -174,8 +180,8 @@ export function AddStudentDialog({
     onSuccess: async (id) => {
       await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id] })
       reset()
-      onClose()
       onCreated(id)
+      onClose()
     },
   })
 
@@ -189,15 +195,15 @@ export function AddStudentDialog({
   const allPaid = months.length > 0 && months.every((m) => paid.has(m.key))
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <SurfaceDialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <form
         onSubmit={(e) => {
           e.preventDefault()
           create.mutate()
         }}
       >
-        <DialogTitle>{t('students.add')}</DialogTitle>
-        <DialogContent>
+        <SurfaceTitle>{t('students.add')}</SurfaceTitle>
+        <SurfaceContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField label={t('students.firstName')} value={first} onChange={(e) => setFirst(e.target.value)} required fullWidth autoFocus />
@@ -320,14 +326,14 @@ export function AddStudentDialog({
             )}
             {create.isError && <Alert severity="error">{errorMessage(create.error, t)}</Alert>}
           </Stack>
-        </DialogContent>
-        <DialogActions>
+        </SurfaceContent>
+        <SurfaceActions>
           <Button onClick={onClose}>{t('common.cancel')}</Button>
           <Button type="submit" variant="contained" loading={create.isPending} disabled={!first.trim() || !last.trim() || !yearId}>
             {t('students.enroll')}
           </Button>
-        </DialogActions>
+        </SurfaceActions>
       </form>
-    </Dialog>
+    </SurfaceDialog>
   )
 }

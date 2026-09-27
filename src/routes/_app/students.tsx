@@ -50,10 +50,12 @@ import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
 import { subjectTokens, tokens } from '#/theme/theme'
 
 export const Route = createFileRoute('/_app/students')({
-  // ?import=1 opens the Excel import (quick actions)
-  validateSearch: (s: Record<string, unknown>): { import?: boolean; tab?: 'parents' } => ({
+  // ?import=1 opens the Excel import (quick actions); ?student=<id> opens a
+  // student's record (links from the assistant)
+  validateSearch: (s: Record<string, unknown>): { import?: boolean; tab?: 'parents'; student?: string } => ({
     import: s.import === true || s.import === 1 || s.import === '1' || undefined,
     tab: s.tab === 'parents' ? 'parents' : undefined,
+    student: typeof s.student === 'string' ? s.student : undefined,
   }),
   loader: ({ context }) => context.schoolId && context.queryClient.prefetchQuery(studentsQuery(context.schoolId)),
   component: StudentsPage,
@@ -66,7 +68,7 @@ function StudentsPage() {
   const [search, setSearch] = useState('')
   const [adding, setAdding] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
-  const { import: openImport, tab } = Route.useSearch()
+  const { import: openImport, tab, student: studentParam } = Route.useSearch()
   const navigateSelf = Route.useNavigate()
   const [importing, setImporting] = useState(false)
   useEffect(() => {
@@ -74,6 +76,11 @@ function StudentsPage() {
     setImporting(true)
     navigateSelf({ search: {}, replace: true })
   }, [openImport, navigateSelf])
+  useEffect(() => {
+    if (!studentParam) return
+    setOpenId(studentParam)
+    navigateSelf({ search: {}, replace: true })
+  }, [studentParam, navigateSelf])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()

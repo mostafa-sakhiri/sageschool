@@ -24,6 +24,7 @@ import { Route as AppSetupRouteImport } from './routes/_app/setup'
 import { Route as AppStudentsRouteImport } from './routes/_app/students'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as AppTimetableRouteImport } from './routes/_app/timetable'
+import { Route as ApiCopilotkitSplatRouteImport } from './routes/api/copilotkit.$'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -99,6 +100,11 @@ const AppTimetableRoute = AppTimetableRouteImport.update({
   path: '/timetable',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiCopilotkitSplatRoute = ApiCopilotkitSplatRouteImport.update({
+  id: '/api/copilotkit/$',
+  path: '/api/copilotkit/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/students': typeof AppStudentsRoute
   '/team': typeof AppTeamRoute
   '/timetable': typeof AppTimetableRoute
+  '/api/copilotkit/$': typeof ApiCopilotkitSplatRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -131,6 +138,7 @@ export interface FileRoutesByTo {
   '/team': typeof AppTeamRoute
   '/timetable': typeof AppTimetableRoute
   '/': typeof AppIndexRoute
+  '/api/copilotkit/$': typeof ApiCopilotkitSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -149,6 +157,7 @@ export interface FileRoutesById {
   '/_app/team': typeof AppTeamRoute
   '/_app/timetable': typeof AppTimetableRoute
   '/_app/': typeof AppIndexRoute
+  '/api/copilotkit/$': typeof ApiCopilotkitSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -167,6 +176,7 @@ export interface FileRouteTypes {
     | '/students'
     | '/team'
     | '/timetable'
+    | '/api/copilotkit/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | '/team'
     | '/timetable'
     | '/'
+    | '/api/copilotkit/$'
   id:
     | '__root__'
     | '/_app'
@@ -200,11 +211,13 @@ export interface FileRouteTypes {
     | '/_app/team'
     | '/_app/timetable'
     | '/_app/'
+    | '/api/copilotkit/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ApiCopilotkitSplatRoute: typeof ApiCopilotkitSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -314,6 +327,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTimetableRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/copilotkit/$': {
+      id: '/api/copilotkit/$'
+      path: '/api/copilotkit/$'
+      fullPath: '/api/copilotkit/$'
+      preLoaderRoute: typeof ApiCopilotkitSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -354,6 +374,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  ApiCopilotkitSplatRoute: ApiCopilotkitSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
