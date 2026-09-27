@@ -37,6 +37,7 @@ import EventNoteOutlined from '@mui/icons-material/EventNoteOutlined'
 import HowToRegOutlined from '@mui/icons-material/HowToRegOutlined'
 import MenuIcon from '@mui/icons-material/Menu'
 import LogoutOutlined from '@mui/icons-material/LogoutOutlined'
+import KeyOutlined from '@mui/icons-material/KeyOutlined'
 import SwapHorizOutlined from '@mui/icons-material/SwapHorizOutlined'
 import CheckOutlined from '@mui/icons-material/CheckOutlined'
 import LightModeOutlined from '@mui/icons-material/LightModeOutlined'
@@ -444,6 +445,17 @@ function UserCard({ compact }: { compact?: boolean }) {
             <ContactPhoneOutlined fontSize="small" />
           </ListItemIcon>
           <ListItemText primary={t('contact.mine')} secondary={formatPhone(ctx.user.phone) || t('contact.noPhone')} />
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            setAnchor(null)
+            navigate({ to: '/reset-password', search: {} })
+          }}
+        >
+          <ListItemIcon>
+            <KeyOutlined fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>{t('reset.mine')}</ListItemText>
         </MenuItem>
         <MenuItem onClick={signOut}>
           <ListItemIcon>

@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestUrl } from '@tanstack/react-start/server'
 import { createClient, createServiceClient } from './supabase/server'
 import type { Role } from './session'
 
@@ -107,4 +108,48 @@ export const inviteMember = createServerFn({ method: 'POST' })
     }
 
     return { memberId: member.id as string, userId, password }
+  })
+
+// A link to choose a new password, handed over by the office (copy, WhatsApp):
+// there is no e-mail delivery (D-008), and phone-only logins have no mailbox.
+// Same rule as inviteMember: admin -> anyone; staff -> parents and students.
+// The link carries a one-time recovery token (valid for the auth OTP expiry,
+// 1 h by default) and opens /reset-password on this app.
+export const createPasswordLink = createServerFn({ method: 'POST' })
+  .validator((d: { schoolId: string; memberId: string }) => ({ schoolId: String(d.schoolId), memberId: String(d.memberId) }))
+  .handler(async ({ data }) => {
+    const supabase = createClient()
+    const { data: claims } = await supabase.auth.getClaims()
+    if (!claims?.claims) throw new Error('Non authentifié')
+
+    const { data: me } = await supabase.from('users').select('id').eq('auth_provider_id', claims.claims.sub).single()
+    const { data: mine } = await supabase
+      .from('school_members')
+      .select('role')
+      .eq('school_id', data.schoolId)
+      .eq('user_id', me?.id ?? '')
+      .eq('status', 'active')
+    const roles = (mine ?? []).map((m) => m.role)
+
+    const admin = createServiceClient()
+    const { data: target } = await admin
+      .from('school_members')
+      .select('role, school_id, user:users(auth_provider_id)')
+      .eq('id', data.memberId)
+      .maybeSingle()
+    if (!target || target.school_id !== data.schoolId) throw new Error('Membre introuvable')
+    const allowed = roles.includes('admin') || (roles.includes('staff') && ['parent', 'student'].includes(target.role))
+    if (!allowed) throw new Error('Droits insuffisants pour ce membre')
+
+    const authId = (target.user as unknown as { auth_provider_id: string | null } | null)?.auth_provider_id
+    if (!authId) throw new Error("Ce membre n'a pas encore de compte de connexion")
+    const { data: account, error: accountError } = await admin.auth.admin.getUserById(authId)
+    if (accountError || !account.user?.email) throw new Error(accountError?.message ?? 'Compte introuvable')
+
+    const { data: link, error } = await admin.auth.admin.generateLink({ type: 'recovery', email: account.user.email })
+    if (error || !link.properties?.hashed_token) throw new Error(error?.message ?? 'Lien impossible à créer')
+
+    // Behind Vercel's proxy the public host and scheme come from x-forwarded-*
+    const origin = getRequestUrl({ xForwardedHost: true, xForwardedProto: true }).origin
+    return { url: `${origin}/reset-password?token_hash=${encodeURIComponent(link.properties.hashed_token)}` }
   })

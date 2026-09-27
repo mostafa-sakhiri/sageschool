@@ -31,6 +31,8 @@ import { InviteDialog } from '#/features/team/InviteDialog'
 import { membersQuery, type MemberRow } from '#/features/team/api'
 import { RoleDialog, type RoleOutcome } from '#/features/team/RoleDialog'
 import { ContactDialog, type ContactTarget } from '#/features/team/ContactDialog'
+import { PasswordLinkDialog, type PasswordLinkTarget } from '#/features/team/PasswordLinkDialog'
+import KeyOutlined from '@mui/icons-material/KeyOutlined'
 import { formatPhone } from '#/lib/format'
 import { WhatsAppButton } from '#/components/WhatsApp'
 import { ImportDialog } from '#/features/import/ImportZone'
@@ -55,6 +57,7 @@ function TeamPage() {
   const members = useQuery(membersQuery(ctx.school.id))
   const [open, setOpen] = useState(false)
   const [contact, setContact] = useState<ContactTarget | null>(null)
+  const [passwordFor, setPasswordFor] = useState<PasswordLinkTarget | null>(null)
   const search = Route.useSearch()
   const navigateSelf = Route.useNavigate()
   const [importing, setImporting] = useState(false)
@@ -151,6 +154,17 @@ function TeamPage() {
                               </IconButton>
                             </Tooltip>
                           )}
+                          {ctx.isAdmin && m.user && m.user.id !== ctx.user.id && (
+                            <Tooltip title={t('reset.linkAction')}>
+                              <IconButton
+                                size="small"
+                                aria-label={`${t('reset.linkAction')} — ${m.user.full_name}`}
+                                onClick={() => setPasswordFor({ memberId: m.id, fullName: m.user!.full_name, phone: m.user!.phone })}
+                              >
+                                <KeyOutlined sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                         </Stack>
                       </TableCell>
                       <TableCell>
@@ -187,6 +201,7 @@ function TeamPage() {
         </Typography>
       </Box>
       {contact && <ContactDialog target={contact} schoolId={ctx.school.id} onClose={() => setContact(null)} />}
+      {passwordFor && <PasswordLinkDialog target={passwordFor} onClose={() => setPasswordFor(null)} />}
       {editing && (
         <RoleDialog
           member={editing}

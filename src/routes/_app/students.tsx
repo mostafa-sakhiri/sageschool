@@ -25,6 +25,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import PersonAddOutlined from '@mui/icons-material/PersonAddOutlined'
@@ -42,6 +43,8 @@ import { classesQuery } from '#/features/classes/api'
 import { currentEnrollment, parentsQuery, studentsQuery, type StudentRow } from '#/features/students/api'
 import { InviteDialog } from '#/features/team/InviteDialog'
 import { ContactDialog, type ContactTarget } from '#/features/team/ContactDialog'
+import { PasswordLinkDialog, type PasswordLinkTarget } from '#/features/team/PasswordLinkDialog'
+import KeyOutlined from '@mui/icons-material/KeyOutlined'
 import { formatPhone } from '#/lib/format'
 import { WhatsAppButton } from '#/components/WhatsApp'
 import { AddStudentDialog } from '#/features/students/AddStudentDialog'
@@ -470,6 +473,7 @@ function ParentsTab({ onOpenStudent }: { onOpenStudent: (id: string) => void }) 
   const students = useQuery(studentsQuery(ctx.school.id))
   const [search, setSearch] = useState('')
   const [contact, setContact] = useState<ContactTarget | null>(null)
+  const [passwordFor, setPasswordFor] = useState<PasswordLinkTarget | null>(null)
   const toggle = useMutation({
     mutationFn: async (p: { id: string; status: string }) =>
       must(await supabase.from('school_members').update({ status: p.status === 'active' ? 'inactive' : 'active' }).eq('id', p.id)),
@@ -537,6 +541,17 @@ function ParentsTab({ onOpenStudent }: { onOpenStudent: (id: string) => void }) 
                               <EditOutlined sx={{ fontSize: 16 }} />
                             </IconButton>
                           )}
+                          {p.user && (
+                            <Tooltip title={t('reset.linkAction')}>
+                              <IconButton
+                                size="small"
+                                aria-label={`${t('reset.linkAction')} — ${p.user.full_name}`}
+                                onClick={() => setPasswordFor({ memberId: p.id, fullName: p.user!.full_name, phone: p.user!.phone })}
+                              >
+                                <KeyOutlined sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                         </Stack>
                       </TableCell>
                       <TableCell dir="ltr" sx={{ textAlign: 'start' }}>{p.user?.email ?? '—'}</TableCell>
@@ -569,6 +584,7 @@ function ParentsTab({ onOpenStudent }: { onOpenStudent: (id: string) => void }) 
         )}
       </QueryState>
       {contact && <ContactDialog target={contact} schoolId={ctx.school.id} onClose={() => setContact(null)} />}
+      {passwordFor && <PasswordLinkDialog target={passwordFor} onClose={() => setPasswordFor(null)} />}
     </>
   )
 }
