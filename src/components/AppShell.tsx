@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Link, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import {
@@ -6,6 +6,7 @@ import {
   Box,
   Button,
   ButtonBase,
+  Collapse,
   Drawer,
   IconButton,
   ListItemIcon,
@@ -74,18 +75,67 @@ const NAV: NavItem[] = [
 
 export const SIDEBAR_WIDTH = 236
 // Folded sidebar: icons only (pages that need the width, e.g. the timetable editor)
-export const RAIL_WIDTH = 60
+export const RAIL_WIDTH = 56
+
+// Folded or not is the person's choice, kept across pages and visits. A page
+// may fold it (the timetable editor, on entering it); nothing unfolds it but
+// the person.
+const LS_NAV = 'sage.nav.folded'
+let navFolded: boolean | null = null
+const navListeners = new Set<() => void>()
+function getNavFolded() {
+  if (navFolded === null) {
+    try {
+      navFolded = localStorage.getItem(LS_NAV) === '1'
+    } catch {
+      navFolded = false
+    }
+  }
+  return navFolded
+}
+function setNavFolded(v: boolean) {
+  navFolded = v
+  try {
+    localStorage.setItem(LS_NAV, v ? '1' : '0')
+  } catch {
+    /* private mode: the choice just isn't remembered */
+  }
+  for (const l of navListeners) l()
+}
+function useNavFolded() {
+  return useSyncExternalStore(
+    (l) => {
+      navListeners.add(l)
+      return () => navListeners.delete(l)
+    },
+    getNavFolded,
+    () => false,
+  )
+}
+
+const EASE = '200ms cubic-bezier(0.4, 0, 0.2, 1)'
+// A label that fades while the sidebar folds (the icons never move)
+function NavLabel({ hidden, children }: { hidden: boolean; children: React.ReactNode }) {
+  return (
+    <Box component="span" sx={{ whiteSpace: 'nowrap', opacity: hidden ? 0 : 1, transition: `opacity ${EASE}` }}>
+      {children}
+    </Box>
+  )
+}
 
 const visuallyHidden = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' } as const
 
-// `compactNav`: the page asks for the folded sidebar; the person can still
-// unfold it (until they leave the page).
+// `compactNav`: the page folds the sidebar when it opens (the person can
+// unfold it; leaving the page doesn't unfold it).
 export function AppShell({ title, children, compactNav }: { title?: string; children: React.ReactNode; compactNav?: boolean }) {
   const theme = useTheme()
   const desktop = useMediaQuery(theme.breakpoints.up('md'))
   const [open, setOpen] = useState(false)
-  const [unfolded, setUnfolded] = useState(false)
-  const compact = desktop && !!compactNav && !unfolded
+  const folded = useNavFolded()
+  const compact = desktop && folded
+  useEffect(() => {
+    if (compactNav) setNavFolded(true)
+  }, [compactNav])
   const { t } = useI18n()
   const assistant = useAssistantUi()
 
@@ -93,7 +143,7 @@ export function AppShell({ title, children, compactNav }: { title?: string; chil
     <Sidebar
       onNavigate={() => setOpen(false)}
       compact={compact}
-      onFold={desktop && compactNav ? () => setUnfolded(!unfolded) : undefined}
+      onFold={desktop ? () => setNavFolded(!folded) : undefined}
     />
   )
   return (
@@ -102,7 +152,7 @@ export function AppShell({ title, children, compactNav }: { title?: string; chil
         <Box
           component="nav"
           aria-label={t('nav.main')}
-          sx={{ width: compact ? RAIL_WIDTH : SIDEBAR_WIDTH, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', transition: 'width 180ms ease' }}
+          sx={{ width: compact ? RAIL_WIDTH : SIDEBAR_WIDTH, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', transition: `width ${EASE}` }}
         >
           {sidebar}
         </Box>
@@ -168,24 +218,23 @@ export function AppShell({ title, children, compactNav }: { title?: string; chil
   )
 }
 
-const navItemSx = (on: boolean, compact: boolean) => ({
+const navItemSx = (on: boolean) => ({
   display: 'flex',
   alignItems: 'center',
-  justifyContent: compact ? 'center' : 'flex-start',
   gap: 1.25,
   minHeight: 32,
-  width: compact ? 36 : 'auto',
-  px: compact ? 0 : 1,
+  px: 1,
   borderRadius: '7px',
   fontSize: 13.5,
   textDecoration: 'none',
+  overflow: 'hidden',
   color: on ? tokens.ink : tokens.sidebarInk,
   bgcolor: on ? tokens.sidebarActive : 'transparent',
   boxShadow: on ? tokens.shadowSm : 'none',
   fontWeight: on ? 500 : 400,
   transition: 'background-color 100ms, color 100ms',
   '&:hover': { bgcolor: on ? tokens.sidebarActive : tokens.sidebarHover, color: tokens.ink },
-  '& svg': { fontSize: 17, color: on ? tokens.accent : tokens.sidebarMuted },
+  '& svg': { fontSize: 17, flexShrink: 0, color: on ? tokens.accent : tokens.sidebarMuted },
   '&:focus-visible': { outline: `2px solid ${tokens.accentLine}`, outlineOffset: 2 },
 })
 
@@ -195,26 +244,21 @@ function AssistantNavItem({ onDone, compact }: { onDone: () => void; compact: bo
   const assistant = useAssistantUi()
   const { t } = useI18n()
   if (!assistant) return null
-  const item = (
-    <ButtonBase
-      onClick={() => {
-        assistant.setOpen(!assistant.open)
-        onDone()
-      }}
-      aria-pressed={assistant.open}
-      aria-label={compact ? t('assistant.title') : undefined}
-      sx={{ ...navItemSx(assistant.open, compact), fontFamily: 'inherit', '& svg': { fontSize: 17, color: tokens.accent } }}
-    >
-      <AutoAwesomeOutlined />
-      {!compact && t('assistant.title')}
-    </ButtonBase>
-  )
-  return compact ? (
-    <Tooltip title={t('assistant.title')} placement="right">
-      {item}
+  return (
+    <Tooltip title={compact ? t('assistant.title') : ''} placement="right">
+      <ButtonBase
+        onClick={() => {
+          assistant.setOpen(!assistant.open)
+          onDone()
+        }}
+        aria-pressed={assistant.open}
+        aria-label={t('assistant.title')}
+        sx={{ ...navItemSx(assistant.open), justifyContent: 'flex-start', fontFamily: 'inherit', '& svg': { fontSize: 17, flexShrink: 0, color: tokens.accent } }}
+      >
+        <AutoAwesomeOutlined />
+        <NavLabel hidden={compact}>{t('assistant.title')}</NavLabel>
+      </ButtonBase>
     </Tooltip>
-  ) : (
-    item
   )
 }
 
@@ -267,64 +311,55 @@ function Sidebar({ onNavigate, compact, onFold }: { onNavigate: () => void; comp
         height: '100%',
         bgcolor: tokens.sidebar,
         borderInlineEnd: `1px solid ${tokens.line}`,
-        px: compact ? 1 : 1.25,
+        px: 1.25,
         py: 1.5,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: compact ? 'center' : 'stretch',
         overflowY: 'auto',
         overflowX: 'hidden',
       }}
     >
       {onFold && (
         <Tooltip title={compact ? t('shell.unfoldNav') : t('shell.foldNav')} placement="right">
-          <IconButton size="small" onClick={onFold} aria-label={compact ? t('shell.unfoldNav') : t('shell.foldNav')} sx={{ alignSelf: compact ? 'center' : 'flex-end', mb: 1 }}>
+          <IconButton size="small" onClick={onFold} aria-label={compact ? t('shell.unfoldNav') : t('shell.foldNav')} aria-expanded={!compact} sx={{ alignSelf: 'flex-start', mb: 1 }}>
             {unfoldIcon}
           </IconButton>
         </Tooltip>
       )}
-      {!compact && <ContextSwitcher />}
+      <Collapse in={!compact} timeout={200}>
+        <ContextSwitcher />
+      </Collapse>
       <QuickActions onDone={onNavigate} compact={compact} />
 
-      <Stack spacing={0.25} sx={{ alignItems: compact ? 'center' : 'stretch' }}>
+      <Stack spacing={0.25}>
         <AssistantNavItem onDone={onNavigate} compact={compact} />
         {items.map((n) => {
           const on = n.to === '/' ? pathname === '/' : pathname.startsWith(n.to)
-          const link = (
-            <Box
-              key={n.to}
-              component={Link}
-              to={n.to}
-              onClick={onNavigate}
-              aria-current={on ? 'page' : undefined}
-              aria-label={compact ? t(n.key) : undefined}
-              sx={navItemSx(on, compact)}
-            >
-              {n.icon}
-              {!compact && t(n.key)}
-            </Box>
-          )
-          return compact ? (
-            <Tooltip key={n.to} title={t(n.key)} placement="right">
-              {link}
+          return (
+            <Tooltip key={n.to} title={compact ? t(n.key) : ''} placement="right">
+              <Box
+                component={Link}
+                to={n.to}
+                onClick={onNavigate}
+                aria-current={on ? 'page' : undefined}
+                aria-label={t(n.key)}
+                sx={navItemSx(on)}
+              >
+                {n.icon}
+                <NavLabel hidden={compact}>{t(n.key)}</NavLabel>
+              </Box>
             </Tooltip>
-          ) : (
-            link
           )
         })}
       </Stack>
 
       <Box sx={{ flex: 1 }} />
-      {compact ? (
-        <Box sx={{ pt: 1.5, borderTop: `1px solid ${tokens.line}`, alignSelf: 'stretch', display: 'flex', justifyContent: 'center' }}>
-          <ThemeToggle />
-        </Box>
-      ) : (
-        <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', px: 0.5, pt: 1.5, borderTop: `1px solid ${tokens.line}` }}>
+      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', px: 0.5, pt: 1.5, borderTop: `1px solid ${tokens.line}` }}>
+        <Collapse in={!compact} orientation="horizontal" timeout={200}>
           <LanguageToggle />
-          <ThemeToggle />
-        </Stack>
-      )}
+        </Collapse>
+        <ThemeToggle />
+      </Stack>
       <UserCard compact={compact} />
     </Box>
   )
@@ -368,7 +403,8 @@ function UserCard({ compact }: { compact?: boolean }) {
           sx={{
             mt: 1,
             minWidth: 0,
-            justifyContent: compact ? 'center' : 'flex-start',
+            overflow: 'hidden',
+            justifyContent: 'flex-start',
             gap: 1.25,
             p: 0.75,
             borderRadius: '8px',
@@ -377,10 +413,10 @@ function UserCard({ compact }: { compact?: boolean }) {
             '&:hover': { bgcolor: tokens.sidebarHover },
           }}
         >
-          <Avatar sx={{ width: 28, height: 28, bgcolor: tokens.accentSoft, color: tokens.accentDark, fontSize: 11, fontWeight: 600 }}>
+          <Avatar sx={{ flexShrink: 0, width: 28, height: 28, bgcolor: tokens.accentSoft, color: tokens.accentDark, fontSize: 11, fontWeight: 600 }}>
             {initials}
           </Avatar>
-          <Box sx={{ minWidth: 0, display: compact ? 'none' : 'block' }}>
+          <Box sx={{ minWidth: 0, opacity: compact ? 0 : 1, transition: `opacity ${EASE}` }}>
             <Typography noWrap dir="auto" sx={{ fontSize: 13, fontWeight: 500 }}>
               {ctx.user.full_name}
             </Typography>

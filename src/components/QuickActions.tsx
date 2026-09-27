@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { Button, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip } from '@mui/material'
+import { Box, Button, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip } from '@mui/material'
 import AddOutlined from '@mui/icons-material/AddOutlined'
 import FaceOutlined from '@mui/icons-material/FaceOutlined'
 import EventOutlined from '@mui/icons-material/EventOutlined'
@@ -15,7 +15,6 @@ import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
 import HowToRegOutlined from '@mui/icons-material/HowToRegOutlined'
 import EventNoteOutlined from '@mui/icons-material/EventNoteOutlined'
 import { useI18n } from '#/i18n/i18n'
-import { tokens } from '#/theme/theme'
 import { useSchool, type Role } from '#/lib/session'
 import { AddStudentDialog } from '#/features/students/AddStudentDialog'
 import { InviteDialog } from '#/features/team/InviteDialog'
@@ -77,33 +76,21 @@ export function QuickActions({ onDone, compact }: { onDone?: () => void; compact
 
   return (
     <>
-      {compact ? (
-        <Tooltip title={t('quick.new')} placement="right">
-          <IconButton
-            onClick={(e) => setAnchor(e.currentTarget)}
-            aria-haspopup="menu"
-            aria-label={t('quick.new')}
-            sx={{ mb: 1.5, bgcolor: tokens.accent, color: '#fff', borderRadius: '8px', '&:hover': { bgcolor: tokens.accentHover } }}
-          >
-            <AddOutlined fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      ) : (
+      <Tooltip title={compact ? t('quick.new') : ''} placement="right">
         <Button
           fullWidth
           variant="contained"
           startIcon={<AddOutlined />}
           onClick={(e) => setAnchor(e.currentTarget)}
           aria-haspopup="menu"
-          sx={{
-            mb: 1.5,
-            justifyContent: 'flex-start',
-            px: 1.25,
-          }}
+          aria-label={t('quick.new')}
+          sx={{ mb: 1.5, minWidth: 0, px: 1.25, justifyContent: 'flex-start', overflow: 'hidden', whiteSpace: 'nowrap', '& .MuiButton-startIcon': { ml: 0 } }}
         >
-          {t('quick.new')}
+          <Box component="span" sx={{ opacity: compact ? 0 : 1, transition: 'opacity 200ms cubic-bezier(0.4, 0, 0.2, 1)' }}>
+            {t('quick.new')}
+          </Box>
         </Button>
-      )}
+      </Tooltip>
       <Menu
         anchorEl={anchor}
         open={!!anchor}
