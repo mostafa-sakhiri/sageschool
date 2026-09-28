@@ -5,11 +5,13 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   InputAdornment,
+  ListItemText,
   MenuItem,
   Paper,
   Stack,
@@ -42,6 +44,9 @@ import { balancesQuery, type Balance } from '#/features/queries'
 
 export const Route = createFileRoute('/_app/fees')({ component: FeesPage })
 
+// Period filter value for everything that is not a monthly fee
+const REGISTRATION = 'registration'
+
 const STATUS_TONE: Record<Balance['payment_status'], Tone> = {
   paid: 'ok',
   partial: 'info',
@@ -57,6 +62,8 @@ function FeesPage() {
   const students = useQuery(studentsQuery(ctx.school.id))
   const [filter, setFilter] = useState<'all' | 'open' | 'overdue' | 'toRemind'>('all')
   const [search, setSearch] = useState('')
+  // Months ('2026-09') and/or REGISTRATION; null = untouched (current month)
+  const [periods, setPeriods] = useState<string[] | null>(null)
   const [paying, setPaying] = useState<Balance | null>(null)
   const [reminding, setReminding] = useState<Balance | null>(null)
   const [rating, setRating] = useState<Balance | null>(null)
@@ -73,7 +80,22 @@ function FeesPage() {
   const name = (id: string) => fullName(students.data?.find((s) => s.id === id))
   // Search by the student's name or the month's label
   const q = search.trim().toLowerCase()
+  const months = useMemo(
+    () => [...new Set((balances.data ?? []).filter((b) => b.monthly).map((b) => b.due_on.slice(0, 7)))].sort(),
+    [balances.data],
+  )
+  const hasRegistration = (balances.data ?? []).some((b) => !b.monthly)
+  // By default the current month only; nothing selected = the whole year
+  const thisMonth = todayIso().slice(0, 7)
+  const selected = periods ?? (months.includes(thisMonth) ? [thisMonth] : [])
+  const inPeriod = (b: Balance) =>
+    selected.length === 0 || selected.includes(b.monthly ? b.due_on.slice(0, 7) : REGISTRATION)
+  const periodLabel = (p: string) =>
+    p === REGISTRATION
+      ? t('fees.registration')
+      : formatDate(`${p}-01`, locale, { month: 'long', year: 'numeric' }).replace(/^./, (c) => c.toUpperCase())
   const rows = (balances.data ?? []).filter((b) =>
+    inPeriod(b) &&
     (!q || name(b.student_id).toLowerCase().includes(q) || b.label.toLowerCase().includes(q)) &&
     (filter === 'all'
       ? true
@@ -83,14 +105,13 @@ function FeesPage() {
           ? b.payment_status === 'overdue' && !reminders.data?.[b.id]
           : ['pending', 'partial', 'overdue'].includes(b.payment_status)),
   )
-  const totals = useMemo(() => {
-    const all = balances.data ?? []
-    return {
-      due: all.reduce((s, b) => s + Number(b.amount_due), 0),
-      paid: all.reduce((s, b) => s + Number(b.amount_paid), 0),
-      overdue: all.filter((b) => b.payment_status === 'overdue').length,
-    }
-  }, [balances.data])
+  // Totals of the selected period(s), whatever the search or status filter
+  const inPeriodRows = (balances.data ?? []).filter(inPeriod)
+  const totals = {
+    due: inPeriodRows.reduce((s, b) => s + Number(b.amount_due), 0),
+    paid: inPeriodRows.reduce((s, b) => s + Number(b.amount_paid), 0),
+    overdue: inPeriodRows.filter((b) => b.payment_status === 'overdue').length,
+  }
 
   if (ctx.isOffice && !ctx.canFees)
     return (
@@ -142,6 +163,41 @@ function FeesPage() {
           htmlInput: { 'aria-label': t('fees.search') },
         }}
       />
+      <TextField
+        select
+        size="small"
+        value={selected}
+        onChange={(e) => {
+          const v = e.target.value as unknown as string[] | string
+          setPeriods(typeof v === 'string' ? v.split(',') : v)
+        }}
+        sx={{ width: { xs: '100%', sm: 240 } }}
+        slotProps={{
+          select: {
+            multiple: true,
+            displayEmpty: true,
+            renderValue: (v) => {
+              const list = v as string[]
+              if (list.length === 0) return t('fees.allPeriods')
+              return list.length === 1 ? periodLabel(list[0]) : t('fees.nPeriods', { n: list.length })
+            },
+          },
+          htmlInput: { 'aria-label': t('fees.period') },
+        }}
+      >
+        {hasRegistration && (
+          <MenuItem value={REGISTRATION}>
+            <Checkbox size="small" checked={selected.includes(REGISTRATION)} sx={{ p: 0.5, mr: 1 }} />
+            <ListItemText primary={t('fees.registration')} />
+          </MenuItem>
+        )}
+        {months.map((m) => (
+          <MenuItem key={m} value={m}>
+            <Checkbox size="small" checked={selected.includes(m)} sx={{ p: 0.5, mr: 1 }} />
+            <ListItemText primary={periodLabel(m)} />
+          </MenuItem>
+        ))}
+      </TextField>
       <ToggleButtonGroup exclusive size="small" value={filter} onChange={(_, v) => v && setFilter(v)}>
         <ToggleButton value="all">{t('common.all')}</ToggleButton>
         <ToggleButton value="open">{t('fees.open')}</ToggleButton>

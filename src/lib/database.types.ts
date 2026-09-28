@@ -2634,6 +2634,7 @@ export type Database = {
           due_on: string | null
           id: string | null
           label: string | null
+          monthly: boolean | null
           payment_status: string | null
           school_id: string | null
           student_id: string | null

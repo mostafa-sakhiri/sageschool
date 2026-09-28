@@ -70,6 +70,8 @@ export type Balance = {
   amount_paid: number
   amount_remaining: number
   payment_status: 'paid' | 'partial' | 'pending' | 'overdue' | 'cancelled'
+  // From a monthly plan; otherwise registration or another one-off fee
+  monthly: boolean
 }
 
 export const balancesQuery = (schoolId: string, yearId: string) =>
@@ -79,7 +81,7 @@ export const balancesQuery = (schoolId: string, yearId: string) =>
       must(
         await supabase
           .from('installment_balances')
-          .select('id, student_id, label, due_on, amount_due, amount_paid, amount_remaining, payment_status')
+          .select('id, student_id, label, due_on, amount_due, amount_paid, amount_remaining, payment_status, monthly')
           .eq('academic_year_id', yearId)
           .order('due_on'),
       ) as Balance[],

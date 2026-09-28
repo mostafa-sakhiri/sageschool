@@ -10,13 +10,13 @@
 --
 -- ID scheme (hex): a1..NN auth users, b1..NN members, c1 students, d1 classes,
 -- e1 years, f1 nodes, 71 versions, 72 slots, 73 announcements, 74 installments,
--- 75 attendance, 76 cases, 77 homework, 78 subjects.
+-- 75 attendance, 76 cases, 77 homework, 78 subjects, 79 fee plans.
 -- =====================================================================
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(75);
+SELECT plan(76);
 
 -- Impersonate a user: JWT claims + the authenticated role (RESET ROLE first).
 CREATE FUNCTION pg_temp.login(p_email text) RETURNS void LANGUAGE plpgsql AS $$
@@ -134,10 +134,12 @@ INSERT INTO announcement_targets (school_id, announcement_id, class_id, node_id)
   ('5c000000-0000-0000-0000-00000000000a', '73000000-0000-0000-0000-000000000002', 'd1000000-0000-0000-0000-000000000001', NULL),
   ('5c000000-0000-0000-0000-00000000000a', '73000000-0000-0000-0000-000000000003', NULL, 'f1000000-0000-0000-0000-000000000003');
 
-INSERT INTO fee_installments (id, school_id, student_id, academic_year_id, label, amount_due, due_on) VALUES
-  ('74000000-0000-0000-0000-000000000001', '5c000000-0000-0000-0000-00000000000a', 'c1000000-0000-0000-0000-000000000001', 'e1000000-0000-0000-0000-00000000000a', 'Septembre', 1500, '2026-09-10'),
-  ('74000000-0000-0000-0000-000000000002', '5c000000-0000-0000-0000-00000000000a', 'c1000000-0000-0000-0000-000000000002', 'e1000000-0000-0000-0000-00000000000a', 'Septembre', 1500, '2026-09-10'),
-  ('74000000-0000-0000-0000-000000000009', '5c000000-0000-0000-0000-00000000000b', 'c1000000-0000-0000-0000-000000000009', 'e1000000-0000-0000-0000-00000000000b', 'Septembre', 2000, '2026-09-10');
+INSERT INTO fee_plans (id, school_id, academic_year_id, name, amount, frequency) VALUES
+  ('79000000-0000-0000-0000-000000000001', '5c000000-0000-0000-0000-00000000000a', 'e1000000-0000-0000-0000-00000000000a', 'Scolarité mensuelle', 1500, 'monthly');
+INSERT INTO fee_installments (id, school_id, student_id, academic_year_id, label, amount_due, due_on, fee_plan_id) VALUES
+  ('74000000-0000-0000-0000-000000000001', '5c000000-0000-0000-0000-00000000000a', 'c1000000-0000-0000-0000-000000000001', 'e1000000-0000-0000-0000-00000000000a', 'Septembre', 1500, '2026-09-10', '79000000-0000-0000-0000-000000000001'),
+  ('74000000-0000-0000-0000-000000000002', '5c000000-0000-0000-0000-00000000000a', 'c1000000-0000-0000-0000-000000000002', 'e1000000-0000-0000-0000-00000000000a', 'Septembre', 1500, '2026-09-10', NULL),
+  ('74000000-0000-0000-0000-000000000009', '5c000000-0000-0000-0000-00000000000b', 'c1000000-0000-0000-0000-000000000009', 'e1000000-0000-0000-0000-00000000000b', 'Septembre', 2000, '2026-09-10', NULL);
 INSERT INTO payments (school_id, installment_id, amount) VALUES
   ('5c000000-0000-0000-0000-00000000000a', '74000000-0000-0000-0000-000000000001', 500),
   ('5c000000-0000-0000-0000-00000000000a', '74000000-0000-0000-0000-000000000002', 1500);
@@ -180,6 +182,8 @@ SELECT results_eq('SELECT id FROM installment_balances', $$VALUES ('74000000-000
   'parent A sees only their child''s fee installments (view is security_invoker)');
 SELECT is((SELECT payment_status FROM installment_balances), 'overdue',
   'installment status computed from partial payment (500/1500, due date passed)');
+SELECT is((SELECT monthly FROM installment_balances), true,
+  'parent A sees their child''s installment as monthly (fee_plans itself is not readable by parents)');
 SELECT results_eq('SELECT id FROM announcements ORDER BY id',
   $$VALUES ('73000000-0000-0000-0000-000000000001'::uuid), ('73000000-0000-0000-0000-000000000002'::uuid)$$,
   'parent A sees whole-school + class A1 announcements, not the A2-node one nor the draft');
