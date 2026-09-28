@@ -98,6 +98,9 @@ function AttendancePage() {
 
 // Roll call (spec 06): one class, one date, one session; everyone present by
 // default, the teacher flips the exceptions. Re-saving updates, never duplicates.
+// Flipped marks stay local until "Enregistrer l'appel": they are kept apart
+// from the saved records (a background refetch never wipes them) and a bar
+// says what is not saved yet.
 function RollCall({ embedded }: { embedded?: boolean }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
@@ -107,7 +110,8 @@ function RollCall({ embedded }: { embedded?: boolean }) {
   const [classId, setClassId] = useState('')
   const [date, setDate] = useState(todayIso())
   const [slotKey, setSlotKey] = useState<string>('day')
-  const [marks, setMarks] = useState<Record<string, Status>>({})
+  // Local changes not yet saved, by student
+  const [edits, setEdits] = useState<Record<string, Status>>({})
   const [saved, setSaved] = useState(false)
   const allStudents = useQuery({ ...studentsQuery(ctx.school.id), enabled: ctx.isOffice })
 
@@ -163,12 +167,20 @@ function RollCall({ embedded }: { embedded?: boolean }) {
     },
   })
 
-  useEffect(() => {
+  const savedMarks = useMemo(() => {
     const m: Record<string, Status> = {}
     for (const r of existing.data ?? []) m[r.student_id] = r.status as Status
-    setMarks(m)
+    return m
   }, [existing.data])
-  useEffect(() => setSaved(false), [classId, date, slotKey])
+  const markOf = (id: string): Status => edits[id] ?? savedMarks[id] ?? 'present'
+  useEffect(() => {
+    setSaved(false)
+    setEdits({})
+  }, [classId, date, slotKey])
+  const changed = (roster.data ?? []).filter((s) => edits[s.id] !== undefined && edits[s.id] !== (savedMarks[s.id] ?? 'present'))
+  // Students with no record yet: this roll call was never saved (for them)
+  const neverSaved = !!existing.data && (roster.data ?? []).some((s) => !savedMarks[s.id])
+  const pending = changed.length > 0 || neverSaved
 
   const save = useMutation({
     mutationFn: async () => {
@@ -178,22 +190,23 @@ function RollCall({ embedded }: { embedded?: boolean }) {
         student_id: s.id,
         session_date: date,
         slot_id: slotId,
-        status: marks[s.id] ?? 'present',
+        status: markOf(s.id),
       }))
       must(await supabase.from('attendance_records').upsert(rows, { onConflict: 'student_id,session_date,slot_id' }))
     },
     onSuccess: async () => {
-      setSaved(true)
       await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'attendance'] })
       await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'absences-day'] })
+      setEdits({})
+      setSaved(true)
     },
   })
 
   const counts = useMemo(() => {
     const c = { present: 0, absent: 0, late: 0, excused: 0 }
-    for (const s of roster.data ?? []) c[marks[s.id] ?? 'present']++
+    for (const s of roster.data ?? []) c[edits[s.id] ?? savedMarks[s.id] ?? 'present']++
     return c
-  }, [roster.data, marks])
+  }, [roster.data, edits, savedMarks])
   const subjectName = (id: string | null) => subjects.data?.find((s) => s.id === id)?.name ?? '—'
 
   if (!ctx.year) return <EmptyState title={t('year.none')} />
@@ -208,7 +221,7 @@ function RollCall({ embedded }: { embedded?: boolean }) {
           <Typography color="text.secondary" sx={{ flex: 1 }}>
             {t('att.subtitle')}
           </Typography>
-          <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending} disabled={!roster.data?.length}>
+          <Button variant={pending ? 'contained' : 'outlined'} onClick={() => save.mutate()} loading={save.isPending} disabled={!roster.data?.length}>
             {t('att.save')}
           </Button>
         </Stack>
@@ -217,13 +230,13 @@ function RollCall({ embedded }: { embedded?: boolean }) {
           title={t('att.title')}
           subtitle={t('att.subtitle')}
           actions={
-            <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending} disabled={!roster.data?.length}>
+            <Button variant={pending ? 'contained' : 'outlined'} onClick={() => save.mutate()} loading={save.isPending} disabled={!roster.data?.length}>
               {t('att.save')}
             </Button>
           }
         />
       )}
-      {saved && (
+      {saved && !pending && (
         <Alert severity="success" sx={{ mb: 2 }}>
           {t('att.saved', { date: formatDate(date, locale) })}
         </Alert>
@@ -264,18 +277,21 @@ function RollCall({ embedded }: { embedded?: boolean }) {
             <Table size="small">
               <TableBody>
                 {rows.map((s) => {
-                  const v = marks[s.id] ?? 'present'
+                  const v = markOf(s.id)
+                  const isChanged = changed.some((c) => c.id === s.id)
                   return (
-                    <TableRow key={s.id}>
+                    <TableRow key={s.id} sx={isChanged ? { bgcolor: tokens.warnSoft } : undefined}>
                       <TableCell>
                         <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
                           <Avatar sx={{ width: 28, height: 28, fontSize: 11, bgcolor: subjectTokens(0).bg, color: subjectTokens(0).ink }}>{initials(fullName(s))}</Avatar>
                           <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{fullName(s)}</Typography>
+                          {isChanged && <Tag tone="warn" label={t('att.notSaved')} />}
                         </Stack>
                       </TableCell>
                       <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                         {ctx.isOffice && (() => {
-                          const rec = existing.data?.find((r) => r.student_id === s.id && (r.status === 'absent' || r.status === 'late'))
+                          // Only once saved, and not while flipped to another mark
+                          const rec = existing.data?.find((r) => r.student_id === s.id && r.status === v && (r.status === 'absent' || r.status === 'late'))
                           return rec ? (
                             <span style={{ marginInlineEnd: 12 }}>
                               <ParentNotified
@@ -293,7 +309,7 @@ function RollCall({ embedded }: { embedded?: boolean }) {
                           exclusive
                           size="small"
                           value={v}
-                          onChange={(_, nv) => nv && (setMarks((m) => ({ ...m, [s.id]: nv })), setSaved(false))}
+                          onChange={(_, nv) => nv && (setEdits((m) => ({ ...m, [s.id]: nv })), setSaved(false))}
                           aria-label={fullName(s)}
                         >
                           {(['present', 'absent', 'late', 'excused'] as const).map((k) => (
@@ -311,6 +327,25 @@ function RollCall({ embedded }: { embedded?: boolean }) {
           </Paper>
         )}
       </QueryState>
+      {pending && !!roster.data?.length && (
+        <Paper
+          elevation={6}
+          role="status"
+          sx={{ position: 'sticky', bottom: 16, mt: 2, p: 1.5, px: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap', border: `1px solid ${tokens.warnLine}`, bgcolor: tokens.warnSoft, zIndex: 2 }}
+        >
+          <Typography sx={{ flex: 1, minWidth: 200, fontWeight: 600 }}>
+            {changed.length ? t('att.pendingChanges', { n: changed.length }) : t('att.notYetSaved')}
+          </Typography>
+          {changed.length > 0 && (
+            <Button color="inherit" onClick={() => setEdits({})} disabled={save.isPending}>
+              {t('att.discard')}
+            </Button>
+          )}
+          <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending}>
+            {t('att.save')}
+          </Button>
+        </Paper>
+      )}
       {ctx.isOffice && <SchoolAbsencesOfDay date={date} />}
     </>
   )

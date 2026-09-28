@@ -36,13 +36,13 @@ export function InviteDialog({
   open: boolean
   onClose: () => void
   schoolId: string
-  roles: Role[]
+  roles: (Role | 'assistant')[]
   title: string
   studentId?: string
   defaultName?: string
   defaultEmail?: string
   defaultPhone?: string
-  defaultRole?: Role
+  defaultRole?: Role | 'assistant'
   onCreated?: (r: InviteResult) => void | Promise<void>
 }) {
   const { t } = useI18n()
@@ -50,7 +50,7 @@ export function InviteDialog({
   const [fullName, setFullName] = useState(defaultName)
   const [email, setEmail] = useState(defaultEmail)
   const [phone, setPhone] = useState(defaultPhone)
-  const [role, setRole] = useState<Role>(defaultRole && roles.includes(defaultRole) ? defaultRole : roles[0])
+  const [role, setRole] = useState<Role | 'assistant'>(defaultRole && roles.includes(defaultRole) ? defaultRole : roles[0])
   const [password, setPassword] = useState('')
   const [result, setResult] = useState<InviteResult | null>(null)
 
@@ -129,7 +129,7 @@ export function InviteDialog({
                 slotProps={{ htmlInput: { dir: 'ltr' } }}
               />
               {roles.length > 1 && (
-                <TextField select label={t('team.role')} value={role} onChange={(e) => setRole(e.target.value as Role)}>
+                <TextField select label={t('team.role')} value={role} onChange={(e) => setRole(e.target.value as Role | 'assistant')}>
                   {roles.map((r) => (
                     <MenuItem key={r} value={r}>
                       {t(`role.${r}`)}

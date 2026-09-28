@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { z } from 'zod'
 import { useHumanInTheLoop } from '@copilotkit/react-core/v2'
-import { useSchool } from '#/lib/session'
+import { STAFF_ROLES, useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { InviteDialog } from '#/features/team/InviteDialog'
 import { DoneCard, FormCard, OpenButton, parseResult, PendingCard, useSettle } from './Card'
@@ -10,7 +10,7 @@ const parameters = z.object({
   fullName: z.string(),
   email: z.string().optional().describe('Adresse e-mail de connexion'),
   phone: z.string().optional(),
-  role: z.enum(['teacher', 'staff', 'admin']).describe('teacher: professeur ; staff: secrétariat ; admin: direction'),
+  role: z.enum(['teacher', 'assistant', 'staff', 'admin']).describe('teacher: professeur ; assistant: professeur assistant ; staff: secrétariat ; admin: direction'),
 })
 type Args = z.infer<typeof parameters>
 
@@ -51,7 +51,7 @@ function InviteCard(props: { args: Partial<Args>; status: string; respond?: (r: 
       <InviteDialog
         open
         schoolId={ctx.school.id}
-        roles={['teacher', 'staff', 'admin']}
+        roles={STAFF_ROLES}
         title={t('team.add')}
         defaultName={a.fullName}
         defaultEmail={a.email ?? ''}

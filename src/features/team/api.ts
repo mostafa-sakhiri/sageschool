@@ -6,6 +6,7 @@ import type { Role } from '#/lib/session'
 export type MemberRow = {
   id: string
   role: Role
+  is_assistant: boolean
   status: 'active' | 'inactive'
   user: { id: string; full_name: string; email: string | null; phone: string | null } | null
 }
@@ -17,7 +18,7 @@ export const membersQuery = (schoolId: string) =>
       must(
         await supabase
           .from('school_members')
-          .select('id, role, status, user:users(id, full_name, email, phone)')
+          .select('id, role, is_assistant, status, user:users(id, full_name, email, phone)')
           .eq('school_id', schoolId)
           .order('created_at'),
       ) as unknown as MemberRow[],

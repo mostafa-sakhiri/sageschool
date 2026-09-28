@@ -5,6 +5,12 @@ import { must } from './errors'
 
 export type Role = 'admin' | 'staff' | 'teacher' | 'parent' | 'student'
 export const ROLE_PRIORITY: Role[] = ['admin', 'staff', 'teacher', 'parent', 'student']
+// What the office picks for a staff member: an assistant is a teacher
+// membership marked is_assistant (same rights, see DECISIONS.md).
+export type StaffRole = 'teacher' | 'assistant' | 'staff' | 'admin'
+export const STAFF_ROLES: StaffRole[] = ['teacher', 'assistant', 'staff', 'admin']
+export const staffRoleOf = (m: { role: Role; is_assistant?: boolean | null }): Role | 'assistant' =>
+  m.role === 'teacher' && m.is_assistant ? 'assistant' : m.role
 
 export type Membership = {
   id: string

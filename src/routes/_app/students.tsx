@@ -8,6 +8,10 @@ import {
   Box,
   Button,
   Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Drawer,
   FormControlLabel,
@@ -32,6 +36,7 @@ import PersonAddOutlined from '@mui/icons-material/PersonAddOutlined'
 import SearchOutlined from '@mui/icons-material/SearchOutlined'
 import CloseOutlined from '@mui/icons-material/CloseOutlined'
 import EditOutlined from '@mui/icons-material/EditOutlined'
+import DeleteOutlined from '@mui/icons-material/DeleteOutlined'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, Tag, fullName, initials } from '#/components/ui'
 import { EmptyState, QueryState } from '#/components/states'
@@ -249,6 +254,7 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
   const [contact, setContact] = useState<ContactTarget | null>(null)
   const [relationship, setRelationship] = useState<'mother' | 'father' | 'guardian' | 'other'>('mother')
   const [isPayer, setIsPayer] = useState(true)
+  const [deleting, setDeleting] = useState(false)
   const enrollment = currentEnrollment(student, ctx.year?.id)
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id] })
@@ -459,7 +465,45 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
         defaultName={fullName(student)}
         title={t('students.enableAccess')}
       />
+
+      <Divider />
+      <Box>
+        <Button color="error" startIcon={<DeleteOutlined />} onClick={() => setDeleting(true)}>
+          {t('students.delete')}
+        </Button>
+      </Box>
+      {deleting && <DeleteStudentDialog student={student} onClose={() => setDeleting(false)} onDeleted={onClose} />}
     </Stack>
+  )
+}
+
+// Erases the student for good (delete_student): enrollment, absences, fees and
+// payments, alerts, parent links, student access. Parents' accounts stay.
+function DeleteStudentDialog({ student, onClose, onDeleted }: { student: StudentRow; onClose: () => void; onDeleted: () => void }) {
+  const { t } = useI18n()
+  const ctx = useSchool()
+  const queryClient = useQueryClient()
+  const remove = useMutation({
+    mutationFn: async () => must(await supabase.rpc('delete_student', { p_student_id: student.id })),
+    onSuccess: async () => {
+      onDeleted()
+      await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id] })
+    },
+  })
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle>{t('students.deleteTitle', { name: fullName(student) })}</DialogTitle>
+      <DialogContent>
+        <Alert severity="warning">{t('students.deleteWarning')}</Alert>
+        {remove.isError && <Alert severity="error" sx={{ mt: 2 }}>{errorMessage(remove.error, t)}</Alert>}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+        <Button variant="contained" color="error" onClick={() => remove.mutate()} loading={remove.isPending}>
+          {t('students.deleteConfirm')}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 

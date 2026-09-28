@@ -299,8 +299,8 @@ function PaymentDialog({ balance, studentName, onClose }: { balance: Balance; st
 }
 
 // One child's monthly fee (reduction, half day, end of a reduction...): the
-// plan's installments of the year change from a given month on. Months that
-// already received a payment keep their amount.
+// plan's installments of the year change for one month, from a month on, or
+// for the whole year. Months that already received a payment keep their amount.
 function RateDialog({
   balance,
   studentName,
@@ -329,12 +329,14 @@ function RateDialog({
           .order('due_on'),
       ),
   })
+  const [scope, setScope] = useState<'month' | 'from' | 'year'>('from')
   const [from, setFrom] = useState('')
   const [amount, setAmount] = useState('')
   const list = months.data ?? []
-  const start = from || list.find((m) => !paidById[m.id])?.due_on || list[0]?.due_on || ''
+  // Starts on the month that was clicked, else the first one not yet paid
+  const start = from || list.find((m) => m.id === balance.id)?.due_on || list.find((m) => !paidById[m.id])?.due_on || list[0]?.due_on || ''
   const shown = amount || (list.length ? String(list[list.length - 1].amount_due) : '')
-  const after = list.filter((m) => m.due_on >= start)
+  const after = list.filter((m) => (scope === 'year' ? true : scope === 'month' ? m.due_on === start : m.due_on >= start))
   const changed = after.filter((m) => !paidById[m.id])
   const kept = after.length - changed.length
   const n = Number(shown)
@@ -356,13 +358,20 @@ function RateDialog({
               <Typography>
                 <strong>{studentName}</strong>
               </Typography>
-              <TextField select label={t('fees.rateFrom')} value={start} onChange={(e) => setFrom(e.target.value)}>
-                {list.map((m) => (
-                  <MenuItem key={m.id} value={m.due_on}>
-                    {m.label} · {formatMoney(m.amount_due, locale)}
-                  </MenuItem>
-                ))}
-              </TextField>
+              <ToggleButtonGroup exclusive size="small" fullWidth value={scope} onChange={(_, v) => v && setScope(v)}>
+                <ToggleButton value="month">{t('fees.rateScope.month')}</ToggleButton>
+                <ToggleButton value="from">{t('fees.rateScope.from')}</ToggleButton>
+                <ToggleButton value="year">{t('fees.rateScope.year')}</ToggleButton>
+              </ToggleButtonGroup>
+              {scope !== 'year' && (
+                <TextField select label={scope === 'month' ? t('fees.rateMonth') : t('fees.rateFrom')} value={start} onChange={(e) => setFrom(e.target.value)}>
+                  {list.map((m) => (
+                    <MenuItem key={m.id} value={m.due_on}>
+                      {m.label} · {formatMoney(m.amount_due, locale)}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              )}
               <TextField
                 label={t('fees.rateNew')}
                 type="number"

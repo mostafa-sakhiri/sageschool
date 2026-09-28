@@ -5,6 +5,10 @@ import {
   Avatar,
   Button,
   Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   IconButton,
   Paper,
   Stack,
@@ -19,6 +23,7 @@ import {
 } from '@mui/material'
 import LoginOutlined from '@mui/icons-material/LoginOutlined'
 import LogoutOutlined from '@mui/icons-material/LogoutOutlined'
+import ScheduleOutlined from '@mui/icons-material/ScheduleOutlined'
 import { Tag, initials, type Tone } from '#/components/ui'
 import { EmptyState, Loading } from '#/components/states'
 import { useSchool } from '#/lib/session'
@@ -26,7 +31,7 @@ import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
 import { errorMessage, must } from '#/lib/errors'
 import { formatPhone, hhmm, nowTime, todayIso, toMinutes } from '#/lib/format'
-import { membersQuery } from '#/features/team/api'
+import { membersQuery, type MemberRow } from '#/features/team/api'
 import type { TeacherSession } from '#/features/timetable/api'
 import { tokens } from '#/theme/theme'
 import { WhatsAppButton } from '#/components/WhatsApp'
@@ -66,8 +71,24 @@ function earlyBy(p: Pick<Presence, 'left_at' | 'expected_end'>) {
   return l != null && e != null && e - l > GRACE ? e - l : 0
 }
 
+type Hours = { member_id: string; weekday: number; starts_at: string; ends_at: string }
+type Expected = { start: string | null; end: string | null; count: number; usual: boolean }
+
+// ISO weekday of a yyyy-mm-dd date (1 = Monday)
+function isoWeekday(day: string) {
+  const d = new Date(`${day}T12:00:00`).getDay()
+  return d === 0 ? 7 : d
+}
+
+const hoursQuery = (schoolId: string) => ({
+  queryKey: ['school', schoolId, 'staff-hours'],
+  queryFn: async () =>
+    must(await supabase.from('staff_hours').select('member_id, weekday, starts_at, ends_at').eq('school_id', schoolId)) as Hours[],
+})
+
 // The secrétariat notes when each teacher arrives and leaves. Compared with the
-// day's timetable (first and last session): late arrivals, early departures and
+// teacher's usual hours for that weekday when set, else with the day's
+// timetable (first and last session): late arrivals, early departures and
 // absences are red; too many late arrivals in the month too.
 export function StaffPresencePanel() {
   const { t } = useI18n()
@@ -78,7 +99,9 @@ export function StaffPresencePanel() {
     () => (members.data ?? []).filter((m) => m.role === 'teacher' && m.status === 'active').sort((a, b) => (a.user?.full_name ?? '').localeCompare(b.user?.full_name ?? '')),
     [members.data],
   )
-  const expected = useQuery({
+  const hours = useQuery(hoursQuery(ctx.school.id))
+  const [editingHours, setEditingHours] = useState<MemberRow | null>(null)
+  const timetable = useQuery({
     queryKey: ['school', ctx.school.id, 'staff-expected', day, teachers.map((m) => m.id).join()],
     enabled: teachers.length > 0,
     queryFn: async () => {
@@ -96,6 +119,14 @@ export function StaffPresencePanel() {
       return out
     },
   })
+  // Usual hours for this weekday win over the timetable
+  const weekday = isoWeekday(day)
+  const expectedOf = (memberId: string): Expected | undefined => {
+    const h = hours.data?.find((x) => x.member_id === memberId && x.weekday === weekday)
+    if (h) return { start: hhmm(h.starts_at), end: hhmm(h.ends_at), count: timetable.data?.[memberId]?.count ?? 0, usual: true }
+    const tt = timetable.data?.[memberId]
+    return tt && { ...tt, usual: false }
+  }
   const monthStart = `${day.slice(0, 7)}-01`
   const presence = useQuery({
     queryKey: ['school', ctx.school.id, 'staff-presence', monthStart],
@@ -148,7 +179,9 @@ export function StaffPresencePanel() {
                   name={m.user?.full_name ?? '—'}
                   phone={m.user?.phone ?? null}
                   day={day}
-                  expected={expected.data?.[m.id]}
+                  isAssistant={m.is_assistant}
+                  expected={expectedOf(m.id)}
+                  onEditHours={() => setEditingHours(m)}
                   row={(presence.data ?? []).find((p) => p.member_id === m.id && p.day === day)}
                   monthIssues={latesThisMonth(m.id)}
                   monthStart={monthStart}
@@ -158,6 +191,7 @@ export function StaffPresencePanel() {
           </Table>
         </Paper>
       )}
+      {editingHours && <HoursDialog member={editingHours} hours={(hours.data ?? []).filter((h) => h.member_id === editingHours.id)} onClose={() => setEditingHours(null)} />}
     </>
   )
 }
@@ -167,7 +201,9 @@ function PresenceRow({
   name,
   phone,
   day,
+  isAssistant,
   expected,
+  onEditHours,
   row,
   monthIssues,
   monthStart,
@@ -176,7 +212,9 @@ function PresenceRow({
   name: string
   phone: string | null
   day: string
-  expected?: { start: string | null; end: string | null; count: number }
+  isAssistant: boolean
+  expected?: Expected
+  onEditHours: () => void
   row?: Presence
   monthIssues: number
   monthStart: string
@@ -245,19 +283,33 @@ function PresenceRow({
           <Avatar sx={{ width: 28, height: 28, fontSize: 11, bgcolor: tokens.accentSoft, color: tokens.accentDark }}>{initials(name)}</Avatar>
           <div>
             <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{name}</Typography>
+            {isAssistant && <Typography sx={{ fontSize: 12, color: tokens.inkMuted }}>{t('role.assistant')}</Typography>}
             {phone && (
               <Typography dir="ltr" sx={{ fontSize: 12, color: tokens.inkMuted, textAlign: 'start' }}>
                 {formatPhone(phone)}
               </Typography>
             )}
           </div>
-          {phone && !arrived && !absent && expected?.count ? (
+          {phone && !arrived && !absent && expected?.start ? (
             <WhatsAppButton phone={phone} text={t('wa.teacherLate', { name, time: expected.start ?? '' })} tooltip={t('wa.teacherLateTooltip')} />
           ) : null}
         </Stack>
       </TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap', color: tokens.inkSoft }}>
-        {expected?.count ? `${expected.start} → ${expected.end}` : <Typography sx={{ fontSize: 13, color: tokens.inkMuted }}>{t('presence.noClass')}</Typography>}
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          {expected?.start ? (
+            <Tooltip title={expected.usual ? t('presence.usualHours') : t('presence.fromTimetable')}>
+              <span>{`${expected.start} → ${expected.end}`}</span>
+            </Tooltip>
+          ) : (
+            <Typography sx={{ fontSize: 13, color: tokens.inkMuted }}>{t('presence.noClass')}</Typography>
+          )}
+          <Tooltip title={t('presence.editHours')}>
+            <IconButton size="small" aria-label={`${t('presence.editHours')} — ${name}`} onClick={onEditHours} sx={{ color: expected?.usual ? tokens.accentDark : undefined }}>
+              <ScheduleOutlined sx={{ fontSize: 17 }} />
+            </IconButton>
+          </Tooltip>
+        </Stack>
       </TableCell>
       <TableCell>
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
@@ -332,5 +384,74 @@ function PresenceRow({
         )}
       </TableCell>
     </TableRow>
+  )
+}
+
+const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7]
+
+// A teacher's usual arrival and departure, per weekday. An empty day follows
+// the timetable (first and last session).
+function HoursDialog({ member, hours, onClose }: { member: MemberRow; hours: Hours[]; onClose: () => void }) {
+  const { t, locale } = useI18n()
+  const ctx = useSchool()
+  const queryClient = useQueryClient()
+  const [rows, setRows] = useState<Record<number, { start: string; end: string }>>(() =>
+    Object.fromEntries(WEEKDAYS.map((d) => {
+      const h = hours.find((x) => x.weekday === d)
+      return [d, { start: hhmm(h?.starts_at), end: hhmm(h?.ends_at) }]
+    })),
+  )
+  // 2024-01-01 was a Monday
+  const dayName = (d: number) => new Date(2024, 0, d).toLocaleDateString(locale, { weekday: 'long' })
+  const set = (d: number, k: 'start' | 'end', v: string) => setRows((r) => ({ ...r, [d]: { ...r[d], [k]: v } }))
+  const invalid = WEEKDAYS.filter((d) => {
+    const { start, end } = rows[d]
+    return (!!start !== !!end) || (start && end && end <= start)
+  })
+  const save = useMutation({
+    mutationFn: async () => {
+      const filled = WEEKDAYS.filter((d) => rows[d].start && rows[d].end)
+      const cleared = WEEKDAYS.filter((d) => !rows[d].start && !rows[d].end)
+      if (filled.length)
+        must(
+          await supabase.from('staff_hours').upsert(
+            filled.map((d) => ({ school_id: ctx.school.id, member_id: member.id, weekday: d, starts_at: rows[d].start, ends_at: rows[d].end })),
+            { onConflict: 'member_id,weekday' },
+          ),
+        )
+      if (cleared.length) must(await supabase.from('staff_hours').delete().eq('member_id', member.id).in('weekday', cleared))
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'staff-hours'] })
+      onClose()
+    },
+  })
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle>{t('presence.hoursTitle', { name: member.user?.full_name ?? '' })}</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          {t('presence.hoursHint')}
+        </Typography>
+        <Stack spacing={1.25}>
+          {WEEKDAYS.map((d) => (
+            <Stack key={d} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Typography sx={{ width: 90, textTransform: 'capitalize', fontSize: 14 }}>{dayName(d)}</Typography>
+              <TextField type="time" size="small" value={rows[d].start} onChange={(e) => set(d, 'start', e.target.value)} error={invalid.includes(d)} slotProps={{ htmlInput: { 'aria-label': `${dayName(d)} — ${t('presence.arrival')}` } }} />
+              <Typography color="text.secondary">→</Typography>
+              <TextField type="time" size="small" value={rows[d].end} onChange={(e) => set(d, 'end', e.target.value)} error={invalid.includes(d)} slotProps={{ htmlInput: { 'aria-label': `${dayName(d)} — ${t('presence.departure')}` } }} />
+            </Stack>
+          ))}
+        </Stack>
+        {invalid.length > 0 && <Alert severity="warning" sx={{ mt: 2 }}>{t('presence.hoursInvalid')}</Alert>}
+        {save.isError && <Alert severity="error" sx={{ mt: 2 }}>{errorMessage(save.error, t)}</Alert>}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+        <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending} disabled={invalid.length > 0}>
+          {t('common.save')}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }

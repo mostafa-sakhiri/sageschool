@@ -8,7 +8,7 @@ type InviteInput = {
   email: string
   fullName: string
   phone?: string
-  role: Role
+  role: Role | 'assistant'
   password?: string
   // role 'student': link the new login to this student record
   studentId?: string
@@ -31,12 +31,15 @@ export const inviteMember = createServerFn({ method: 'POST' })
     const email = String(d.email ?? '').trim().toLowerCase()
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('E-mail invalide')
     if (!String(d.fullName ?? '').trim()) throw new Error('Nom obligatoire')
-    if (!['admin', 'staff', 'teacher', 'parent', 'student'].includes(d.role)) throw new Error('Rôle invalide')
+    if (!['admin', 'staff', 'teacher', 'assistant', 'parent', 'student'].includes(d.role)) throw new Error('Rôle invalide')
     const phone = String(d.phone ?? '').replace(/[^\d+]/g, '')
     if (phone && !/^\+?\d{6,15}$/.test(phone)) throw new Error('Téléphone invalide')
     return { ...d, email, phone: phone || undefined, fullName: d.fullName.trim() }
   })
-  .handler(async ({ data }) => {
+  .handler(async ({ data: input }) => {
+    // An assistant is a teacher membership marked is_assistant
+    const isAssistant = input.role === 'assistant'
+    const data = { ...input, role: (isAssistant ? 'teacher' : input.role) as Role }
     const supabase = createClient()
     const { data: claims } = await supabase.auth.getClaims()
     if (!claims?.claims) throw new Error('Non authentifié')
@@ -90,7 +93,7 @@ export const inviteMember = createServerFn({ method: 'POST' })
     const { data: member, error: memberError } = await admin
       .from('school_members')
       .upsert(
-        { school_id: data.schoolId, user_id: userId, role: data.role, status: 'active' },
+        { school_id: data.schoolId, user_id: userId, role: data.role, status: 'active', is_assistant: isAssistant },
         { onConflict: 'school_id,user_id,role' },
       )
       .select('id')

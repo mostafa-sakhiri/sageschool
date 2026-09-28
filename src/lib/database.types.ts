@@ -1686,6 +1686,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_assistant: boolean
           role: string
           school_id: string
           status: string
@@ -1695,6 +1696,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          is_assistant?: boolean
           role: string
           school_id: string
           status?: string
@@ -1704,6 +1706,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          is_assistant?: boolean
           role?: string
           school_id?: string
           status?: string
@@ -1797,6 +1800,51 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      staff_hours: {
+        Row: {
+          created_at: string
+          ends_at: string
+          member_id: string
+          school_id: string
+          starts_at: string
+          updated_at: string
+          weekday: number
+        }
+        Insert: {
+          created_at?: string
+          ends_at: string
+          member_id: string
+          school_id: string
+          starts_at: string
+          updated_at?: string
+          weekday: number
+        }
+        Update: {
+          created_at?: string
+          ends_at?: string
+          member_id?: string
+          school_id?: string
+          starts_at?: string
+          updated_at?: string
+          weekday?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_hours_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "school_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_hours_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       staff_presence: {
         Row: {
@@ -2718,6 +2766,7 @@ export type Database = {
         Args: { p_name: string; p_settings?: Json; p_slug: string }
         Returns: string
       }
+      delete_student: { Args: { p_student_id: string }; Returns: undefined }
       fork_timetable_version: {
         Args: {
           p_class_id: string

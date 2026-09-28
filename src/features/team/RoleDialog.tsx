@@ -16,10 +16,9 @@ import {
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
 import { errorMessage, must } from '#/lib/errors'
-import type { Role } from '#/lib/session'
+import { STAFF_ROLES, staffRoleOf, type StaffRole } from '#/lib/session'
 import type { MemberRow } from './api'
 
-const ROLES: Role[] = ['teacher', 'staff', 'admin']
 export type RoleOutcome = 'replaced' | 'merged' | 'added' | 'unchanged'
 
 // Change a staff member's role (change_member_role): a teacher who still has
@@ -33,11 +32,12 @@ export function RoleDialog({
   member: MemberRow
   schoolId: string
   onClose: () => void
-  onDone: (outcome: RoleOutcome, role: Role) => void
+  onDone: (outcome: RoleOutcome, role: StaffRole) => void
 }) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
-  const [role, setRole] = useState<Role>(member.role)
+  const current = staffRoleOf(member)
+  const [role, setRole] = useState<StaffRole>(current as StaffRole)
   const save = useMutation({
     mutationFn: async () => must(await supabase.rpc('change_member_role', { p_member_id: member.id, p_role: role })) as RoleOutcome,
     onSuccess: async (outcome) => {
@@ -52,8 +52,8 @@ export function RoleDialog({
     <Dialog open onClose={onClose} fullWidth maxWidth="xs">
       <DialogTitle>{t('team.changeRoleOf', { name })}</DialogTitle>
       <DialogContent>
-        <RadioGroup value={role} onChange={(e) => setRole(e.target.value as Role)}>
-          {ROLES.map((r) => (
+        <RadioGroup value={role} onChange={(e) => setRole(e.target.value as StaffRole)}>
+          {STAFF_ROLES.map((r) => (
             <FormControlLabel
               key={r}
               value={r}
@@ -65,7 +65,7 @@ export function RoleDialog({
                 <Stack>
                   <Typography sx={{ fontWeight: 600 }}>
                     {t(`role.${r}`)}
-                    {r === member.role && (
+                    {r === current && (
                       <Typography component="span" sx={{ fontWeight: 400, color: 'text.secondary', fontSize: 13 }}>
                         {' '}
                         · {t('team.currentRole')}
@@ -80,7 +80,7 @@ export function RoleDialog({
             />
           ))}
         </RadioGroup>
-        {member.role === 'teacher' && role !== 'teacher' && (
+        {member.role === 'teacher' && role !== 'teacher' && role !== 'assistant' && (
           <Alert severity="info" sx={{ mt: 1.5 }}>
             {t('team.teacherKeeps')}
           </Alert>
@@ -98,7 +98,7 @@ export function RoleDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t('common.cancel')}</Button>
-        <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending} disabled={role === member.role}>
+        <Button variant="contained" onClick={() => save.mutate()} loading={save.isPending} disabled={role === current}>
           {t('common.save')}
         </Button>
       </DialogActions>

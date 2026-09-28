@@ -15,7 +15,7 @@ import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
 import HowToRegOutlined from '@mui/icons-material/HowToRegOutlined'
 import EventNoteOutlined from '@mui/icons-material/EventNoteOutlined'
 import { useI18n } from '#/i18n/i18n'
-import { useSchool, type Role } from '#/lib/session'
+import { STAFF_ROLES, useSchool, type Role } from '#/lib/session'
 import { AddStudentDialog } from '#/features/students/AddStudentDialog'
 import { InviteDialog } from '#/features/team/InviteDialog'
 import { NewYearDialog } from './ContextSwitcher'
@@ -116,7 +116,7 @@ export function QuickActions({ onDone, compact }: { onDone?: () => void; compact
           open
           onClose={() => setDialog(null)}
           schoolId={ctx.school.id}
-          roles={['teacher', 'staff', 'admin']}
+          roles={STAFF_ROLES}
           title={t('team.add')}
         />
       )}
