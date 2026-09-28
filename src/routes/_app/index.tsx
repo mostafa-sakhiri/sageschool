@@ -18,6 +18,7 @@ import { alertsQuery } from '#/features/attendance/api'
 import { followupDue, preregsQuery } from '#/features/preregistrations/api'
 import { classesQuery } from '#/features/classes/api'
 import { currentEnrollment, studentsQuery } from '#/features/students/api'
+import { birthdayPlansQuery, birthdaysBetween, twoWeeks } from '#/features/birthdays/api'
 import { subjectsQuery } from '#/features/structure/api'
 import { membersNamesQuery, subjectColor, type DaySession, type TeacherSession } from '#/features/timetable/api'
 import { announcementsQuery, balancesQuery, casesQuery, homeworkQuery } from '#/features/queries'
@@ -127,6 +128,7 @@ function OfficeDash() {
   })
   const today = todayIso()
   const alerts = useQuery(alertsQuery(ctx.school.id))
+  const birthdayPlans = useQuery(birthdayPlansQuery(ctx.school.id))
   const preregs = useQuery(preregsQuery(ctx.school.id))
   const appointments = useQuery({
     queryKey: ['school', ctx.school.id, 'appointments', 'day', today],
@@ -184,6 +186,8 @@ function OfficeDash() {
   const notReminded = (balances.data ?? []).filter((b) => b.payment_status === 'overdue' && !reminders.data?.[b.id])
   const overdue = (balances.data ?? []).filter((b) => b.payment_status === 'overdue')
   const noParent = studentRows.filter((s) => s.guardians.length === 0)
+  // Birthdays of this week and next still to organize (not yet decided or done)
+  const birthdays = birthdayPlans.data ? birthdaysBetween(studentRows, ...twoWeeks(today), birthdayPlans.data).filter((b) => b.status === 'to_organize') : []
 
   const nameOf = (id: string) => fullName(studentRows.find((s) => s.id === id))
   const todos: Todo[] = [
@@ -195,6 +199,21 @@ function OfficeDash() {
       : []),
     ...((appointments.data ?? []).length
       ? [{ key: 'agenda', title: t('dash.appointmentsToday', { n: appointments.data!.length }), detail: appointments.data!.slice(0, 3).map((a) => `${new Date(a.starts_at).toTimeString().slice(0, 5)} ${a.title}`).join(' · '), to: '/agenda', action: t('dash.seeAgenda'), level: 'info' as const }]
+      : []),
+    ...(birthdays.length
+      ? [
+          {
+            key: 'birthdays',
+            title: t('dash.birthdays', { n: birthdays.length }),
+            detail: birthdays
+              .slice(0, 3)
+              .map((b) => `${fullName(b.student)} (${b.date === today ? t('events.today') : formatDate(b.date, locale, { weekday: 'short', day: 'numeric', month: 'short' })})`)
+              .join(', '),
+            to: '/events',
+            action: t('dash.seeBirthdays'),
+            level: 'high' as const,
+          },
+        ]
       : []),
     ...(dueFollowups.length
       ? [{ key: 'prereg', title: t('dash.followupsDue', { n: dueFollowups.length }), detail: dueFollowups.slice(0, 3).map((p) => `${p.child_first_name} ${p.child_last_name}`).join(', '), to: '/preregistrations', action: t('dash.followUp'), level: 'high' as const }]

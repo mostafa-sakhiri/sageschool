@@ -35,6 +35,7 @@ import ForumOutlined from '@mui/icons-material/ForumOutlined'
 import MenuBookOutlined from '@mui/icons-material/MenuBookOutlined'
 import EventNoteOutlined from '@mui/icons-material/EventNoteOutlined'
 import HowToRegOutlined from '@mui/icons-material/HowToRegOutlined'
+import CakeOutlined from '@mui/icons-material/CakeOutlined'
 import MenuIcon from '@mui/icons-material/Menu'
 import LogoutOutlined from '@mui/icons-material/LogoutOutlined'
 import KeyOutlined from '@mui/icons-material/KeyOutlined'
@@ -66,6 +67,7 @@ const NAV: NavItem[] = [
   { to: '/students', key: 'nav.students', icon: <FaceOutlined />, roles: ['admin', 'staff'] },
   { to: '/preregistrations', key: 'nav.preregistrations', icon: <HowToRegOutlined />, roles: ['admin', 'staff'] },
   { to: '/agenda', key: 'nav.agenda', icon: <EventNoteOutlined />, roles: ['admin', 'staff'] },
+  { to: '/events', key: 'nav.events', icon: <CakeOutlined />, roles: ['admin', 'staff'] },
   { to: '/timetable', key: 'nav.timetable', icon: <CalendarMonthOutlined />, roles: ['admin', 'staff', 'teacher', 'parent', 'student'] },
   { to: '/attendance', key: 'nav.attendance', icon: <FactCheckOutlined />, roles: ['admin', 'staff', 'teacher', 'parent', 'student'] },
   { to: '/homework', key: 'nav.homework', icon: <MenuBookOutlined />, roles: ['teacher', 'parent', 'student'] },

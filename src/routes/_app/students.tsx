@@ -50,9 +50,10 @@ import { InviteDialog } from '#/features/team/InviteDialog'
 import { ContactDialog, type ContactTarget } from '#/features/team/ContactDialog'
 import { PasswordLinkDialog, type PasswordLinkTarget } from '#/features/team/PasswordLinkDialog'
 import KeyOutlined from '@mui/icons-material/KeyOutlined'
-import { formatPhone } from '#/lib/format'
+import { formatDate, formatPhone, todayIso } from '#/lib/format'
 import { WhatsAppButton } from '#/components/WhatsApp'
 import { AddStudentDialog } from '#/features/students/AddStudentDialog'
+import { EditStudentDialog } from '#/features/students/EditStudentDialog'
 import { ImportDialog } from '#/features/import/ImportZone'
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
 import { subjectTokens, tokens } from '#/theme/theme'
@@ -70,7 +71,7 @@ export const Route = createFileRoute('/_app/students')({
 })
 
 function StudentsPage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const ctx = useSchool()
   const students = useQuery(studentsQuery(ctx.school.id))
   const [search, setSearch] = useState('')
@@ -171,6 +172,7 @@ function StudentsPage() {
                 <TableRow>
                   <TableCell>{t('students.student')}</TableCell>
                   <TableCell>{t('students.class')}</TableCell>
+                  <TableCell>{t('students.birthDate')}</TableCell>
                   <TableCell>{t('students.parents')}</TableCell>
                   <TableCell>{t('students.access')}</TableCell>
                 </TableRow>
@@ -198,6 +200,7 @@ function StudentsPage() {
                         </Stack>
                       </TableCell>
                       <TableCell>{e?.class?.name ?? <Tag tone="warn" label={t('students.noClass')} />}</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap', color: s.birth_date ? undefined : tokens.inkMuted }}>{s.birth_date ? formatDate(s.birth_date, locale) : '—'}</TableCell>
                       <TableCell>
                         {s.guardians.length ? (
                           <Stack spacing={0.25}>
@@ -242,8 +245,13 @@ function StudentsPage() {
   )
 }
 
+// Age in whole years on a given day
+function ageOn(birth: string, day: string) {
+  return Number(day.slice(0, 4)) - Number(birth.slice(0, 4)) - (day.slice(5) < birth.slice(5) ? 1 : 0)
+}
+
 function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () => void }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
   const classes = useQuery({ ...classesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year })
@@ -255,6 +263,7 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
   const [relationship, setRelationship] = useState<'mother' | 'father' | 'guardian' | 'other'>('mother')
   const [isPayer, setIsPayer] = useState(true)
   const [deleting, setDeleting] = useState(false)
+  const [editing, setEditing] = useState(false)
   const enrollment = currentEnrollment(student, ctx.year?.id)
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id] })
@@ -317,8 +326,24 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
     <Stack spacing={2.5}>
       <Stack direction="row" sx={{ alignItems: 'center' }}>
         <Box sx={{ flex: 1 }}>
-          <Typography variant="h3">{fullName(student)}</Typography>
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+            <Typography variant="h3">{fullName(student)}</Typography>
+            <Tooltip title={t('students.edit')}>
+              <IconButton size="small" aria-label={t('students.edit')} onClick={() => setEditing(true)}>
+                <EditOutlined sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          </Stack>
           <Typography color="text.secondary">{enrollment?.class?.name ?? t('students.noClass')}</Typography>
+          {student.birth_date ? (
+            <Typography sx={{ fontSize: 14, color: tokens.inkSoft }}>
+              {t('students.bornOn', { date: formatDate(student.birth_date, locale, { day: 'numeric', month: 'long', year: 'numeric' }), n: ageOn(student.birth_date, todayIso()) })}
+            </Typography>
+          ) : (
+            <Button size="small" onClick={() => setEditing(true)} sx={{ p: 0, minHeight: 0, alignSelf: 'flex-start' }}>
+              {t('students.addBirthDate')}
+            </Button>
+          )}
         </Box>
         <IconButton aria-label={t('common.close')} onClick={onClose}>
           <CloseOutlined />
@@ -476,6 +501,7 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
           </Box>
         </>
       )}
+      {editing && <EditStudentDialog student={student} onClose={() => setEditing(false)} />}
       {deleting && <DeleteStudentDialog student={student} onClose={() => setDeleting(false)} onDeleted={onClose} />}
     </Stack>
   )

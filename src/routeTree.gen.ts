@@ -18,6 +18,7 @@ import { Route as AppAnnouncementsRouteImport } from './routes/_app/announcement
 import { Route as AppAttendanceRouteImport } from './routes/_app/attendance'
 import { Route as AppCasesRouteImport } from './routes/_app/cases'
 import { Route as AppClassesRouteImport } from './routes/_app/classes'
+import { Route as AppEventsRouteImport } from './routes/_app/events'
 import { Route as AppFeesRouteImport } from './routes/_app/fees'
 import { Route as AppHomeworkRouteImport } from './routes/_app/homework'
 import { Route as AppPreregistrationsRouteImport } from './routes/_app/preregistrations'
@@ -71,6 +72,11 @@ const AppClassesRoute = AppClassesRouteImport.update({
   path: '/classes',
   getParentRoute: () => AppRoute,
 } as any)
+const AppEventsRoute = AppEventsRouteImport.update({
+  id: '/events',
+  path: '/events',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppFeesRoute = AppFeesRouteImport.update({
   id: '/fees',
   path: '/fees',
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/attendance': typeof AppAttendanceRoute
   '/cases': typeof AppCasesRoute
   '/classes': typeof AppClassesRoute
+  '/events': typeof AppEventsRoute
   '/fees': typeof AppFeesRoute
   '/homework': typeof AppHomeworkRoute
   '/preregistrations': typeof AppPreregistrationsRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/attendance': typeof AppAttendanceRoute
   '/cases': typeof AppCasesRoute
   '/classes': typeof AppClassesRoute
+  '/events': typeof AppEventsRoute
   '/fees': typeof AppFeesRoute
   '/homework': typeof AppHomeworkRoute
   '/preregistrations': typeof AppPreregistrationsRoute
@@ -158,6 +166,7 @@ export interface FileRoutesById {
   '/_app/attendance': typeof AppAttendanceRoute
   '/_app/cases': typeof AppCasesRoute
   '/_app/classes': typeof AppClassesRoute
+  '/_app/events': typeof AppEventsRoute
   '/_app/fees': typeof AppFeesRoute
   '/_app/homework': typeof AppHomeworkRoute
   '/_app/preregistrations': typeof AppPreregistrationsRoute
@@ -179,6 +188,7 @@ export interface FileRouteTypes {
     | '/attendance'
     | '/cases'
     | '/classes'
+    | '/events'
     | '/fees'
     | '/homework'
     | '/preregistrations'
@@ -196,6 +206,7 @@ export interface FileRouteTypes {
     | '/attendance'
     | '/cases'
     | '/classes'
+    | '/events'
     | '/fees'
     | '/homework'
     | '/preregistrations'
@@ -215,6 +226,7 @@ export interface FileRouteTypes {
     | '/_app/attendance'
     | '/_app/cases'
     | '/_app/classes'
+    | '/_app/events'
     | '/_app/fees'
     | '/_app/homework'
     | '/_app/preregistrations'
@@ -298,6 +310,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppClassesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/events': {
+      id: '/_app/events'
+      path: '/events'
+      fullPath: '/events'
+      preLoaderRoute: typeof AppEventsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/fees': {
       id: '/_app/fees'
       path: '/fees'
@@ -363,6 +382,7 @@ interface AppRouteChildren {
   AppAttendanceRoute: typeof AppAttendanceRoute
   AppCasesRoute: typeof AppCasesRoute
   AppClassesRoute: typeof AppClassesRoute
+  AppEventsRoute: typeof AppEventsRoute
   AppFeesRoute: typeof AppFeesRoute
   AppHomeworkRoute: typeof AppHomeworkRoute
   AppPreregistrationsRoute: typeof AppPreregistrationsRoute
@@ -379,6 +399,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAttendanceRoute: AppAttendanceRoute,
   AppCasesRoute: AppCasesRoute,
   AppClassesRoute: AppClassesRoute,
+  AppEventsRoute: AppEventsRoute,
   AppFeesRoute: AppFeesRoute,
   AppHomeworkRoute: AppHomeworkRoute,
   AppPreregistrationsRoute: AppPreregistrationsRoute,

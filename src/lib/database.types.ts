@@ -396,6 +396,48 @@ export type Database = {
           },
         ]
       }
+      birthday_plans: {
+        Row: {
+          by_member_id: string | null
+          school_id: string
+          status: string
+          student_id: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          by_member_id?: string | null
+          school_id: string
+          status?: string
+          student_id: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          by_member_id?: string | null
+          school_id?: string
+          status?: string
+          student_id?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "birthday_plans_by_member_id_fkey"
+            columns: ["by_member_id"]
+            isOneToOne: false
+            referencedRelation: "school_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "birthday_plans_student_id_school_id_fkey"
+            columns: ["student_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "school_id"]
+          },
+        ]
+      }
       case_messages: {
         Row: {
           author_member_id: string

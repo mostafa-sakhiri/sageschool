@@ -16,7 +16,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(76);
+SELECT plan(81);
 
 -- Impersonate a user: JWT claims + the authenticated role (RESET ROLE first).
 CREATE FUNCTION pg_temp.login(p_email text) RETURNS void LANGUAGE plpgsql AS $$
@@ -435,6 +435,27 @@ SELECT is((SELECT author_member_id FROM announcements WHERE id = '73000000-0000-
   'b1000000-0000-0000-0000-000000000001'::uuid, 'announcements: the author does not change on edit');
 SELECT isnt_empty($$DELETE FROM announcements WHERE id = '73000000-0000-0000-0000-000000000004' RETURNING id$$,
   'announcements: staff deletes an announcement');
+RESET ROLE;
+
+-- Birthdays (migration 20260928120000): office only, author set by trigger
+SELECT pg_temp.login('staff.a@test.ma');
+SELECT lives_ok($$INSERT INTO birthday_plans (school_id, student_id, year, status)
+                  VALUES ('5c000000-0000-0000-0000-00000000000a', 'c1000000-0000-0000-0000-000000000001', 2026, 'organized')
+                  ON CONFLICT (student_id, year) DO UPDATE SET status = EXCLUDED.status$$,
+  'birthdays: staff marks a birthday as organized');
+SELECT is((SELECT by_member_id FROM birthday_plans WHERE student_id = 'c1000000-0000-0000-0000-000000000001'),
+  'b1000000-0000-0000-0000-000000000002'::uuid, 'birthdays: the author is the staff member');
+RESET ROLE;
+SELECT pg_temp.login('pa@test.ma');
+SELECT is((SELECT count(*) FROM birthday_plans)::int, 0, 'birthdays: a parent sees no birthday plan, not even their child''s');
+RESET ROLE;
+SELECT pg_temp.login('t1@test.ma');
+SELECT throws_ok($$INSERT INTO birthday_plans (school_id, student_id, year, status)
+                   VALUES ('5c000000-0000-0000-0000-00000000000a', 'c1000000-0000-0000-0000-000000000003', 2026, 'organized')$$,
+  '42501', NULL, 'birthdays: a teacher cannot set a birthday plan');
+RESET ROLE;
+SELECT pg_temp.login('admin.b@test.ma');
+SELECT is((SELECT count(*) FROM birthday_plans)::int, 0, 'birthdays: admin B sees none of school A''s');
 RESET ROLE;
 
 SELECT * FROM finish();
