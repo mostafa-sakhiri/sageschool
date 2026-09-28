@@ -422,7 +422,7 @@
   "fees.rateScope.month": "هذا الشهر فقط",
   "fees.rateScope.year": "السنة كاملة",
   "fees.rateFrom": "ابتداءً من",
-  "fees.rateKeepPaid": "يحتفظ {n} شهر مؤدى (ولو جزئياً) بمبلغه.",
+  "fees.rateKeepPaid": "يحتفظ {n} شهر مؤدى بأكثر من هذا المبلغ بمبلغه.",
   "fees.rateNew": "القسط الشهري الجديد (درهم)",
   "fees.rateNone": "لا يوجد قسط شهري لهذا التلميذ هذه السنة.",
   "fees.ratePreview": "سيصبح مبلغ {n} شهر {amount}.",

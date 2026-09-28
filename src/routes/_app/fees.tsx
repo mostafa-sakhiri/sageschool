@@ -325,7 +325,9 @@ function PaymentDialog({ balance, studentName, onClose }: { balance: Balance; st
 
 // One child's monthly fee (reduction, half day, end of a reduction...): the
 // plan's installments of the year change for one month, from a month on, or
-// for the whole year. Months that already received a payment keep their amount.
+// for the whole year. A month keeps its amount only when more than the new
+// amount was already paid for it (it would be overpaid); a partly paid month
+// changes (800 due, 750 paid, new 750 -> paid).
 function RateDialog({
   balance,
   studentName,
@@ -362,9 +364,10 @@ function RateDialog({
   const start = from || list.find((m) => m.id === balance.id)?.due_on || list.find((m) => !paidById[m.id])?.due_on || list[0]?.due_on || ''
   const shown = amount || (list.length ? String(list[list.length - 1].amount_due) : '')
   const after = list.filter((m) => (scope === 'year' ? true : scope === 'month' ? m.due_on === start : m.due_on >= start))
-  const changed = after.filter((m) => !paidById[m.id])
-  const kept = after.length - changed.length
   const n = Number(shown)
+  const overpaid = after.filter((m) => (paidById[m.id] ?? 0) > n)
+  const changed = after.filter((m) => (paidById[m.id] ?? 0) <= n && Number(m.amount_due) !== n)
+  const kept = overpaid.length
   const save = useMutation({
     mutationFn: async () =>
       must(await supabase.from('fee_installments').update({ amount_due: n }).in('id', changed.map((m) => m.id))),

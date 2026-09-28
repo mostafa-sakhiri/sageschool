@@ -422,7 +422,7 @@
   "fees.rateScope.month": "Ce mois seulement",
   "fees.rateScope.year": "Toute l'année",
   "fees.rateFrom": "À partir de",
-  "fees.rateKeepPaid": "{n} mois déjà réglés (même en partie) gardent leur montant.",
+  "fees.rateKeepPaid": "{n} mois déjà payés au-delà de ce montant gardent le leur.",
   "fees.rateNew": "Nouvelle mensualité (MAD)",
   "fees.rateNone": "Aucune mensualité pour cet élève cette année.",
   "fees.ratePreview": "{n} mois passent à {amount}.",
