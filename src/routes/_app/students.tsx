@@ -466,12 +466,16 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
         title={t('students.enableAccess')}
       />
 
-      <Divider />
-      <Box>
-        <Button color="error" startIcon={<DeleteOutlined />} onClick={() => setDeleting(true)}>
-          {t('students.delete')}
-        </Button>
-      </Box>
+      {ctx.isAdmin && (
+        <>
+          <Divider />
+          <Box>
+            <Button color="error" startIcon={<DeleteOutlined />} onClick={() => setDeleting(true)}>
+              {t('students.delete')}
+            </Button>
+          </Box>
+        </>
+      )}
       {deleting && <DeleteStudentDialog student={student} onClose={() => setDeleting(false)} onDeleted={onClose} />}
     </Stack>
   )
@@ -479,6 +483,7 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
 
 // Erases the student for good (delete_student): enrollment, absences, fees and
 // payments, alerts, parent links, student access. Parents' accounts stay.
+// Administration only.
 function DeleteStudentDialog({ student, onClose, onDeleted }: { student: StudentRow; onClose: () => void; onDeleted: () => void }) {
   const { t } = useI18n()
   const ctx = useSchool()
