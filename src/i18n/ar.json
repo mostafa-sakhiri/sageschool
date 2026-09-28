@@ -448,6 +448,7 @@
   "fees.remindStub": "زر واتساب يفتح واتساب برسالة التذكير جاهزة ويسجل التذكير.",
   "fees.remindTitle": "تذكير بأداء متأخر",
   "fees.remindedOn": "في {date} ({n}×)",
+  "fees.search": "ابحث عن تلميذ أو شهر",
   "fees.status.cancelled": "ملغاة",
   "fees.status.overdue": "متأخرة",
   "fees.status.paid": "مؤداة",

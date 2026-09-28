@@ -9,6 +9,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  InputAdornment,
   MenuItem,
   Paper,
   Stack,
@@ -22,6 +23,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
+import SearchOutlined from '@mui/icons-material/SearchOutlined'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, StatCard, Tag, fullName, type Tone } from '#/components/ui'
 import { EmptyState, QueryState } from '#/components/states'
@@ -54,6 +56,7 @@ function FeesPage() {
   const balances = useQuery({ ...balancesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year && (ctx.canFees || !ctx.isOffice) })
   const students = useQuery(studentsQuery(ctx.school.id))
   const [filter, setFilter] = useState<'all' | 'open' | 'overdue' | 'toRemind'>('all')
+  const [search, setSearch] = useState('')
   const [paying, setPaying] = useState<Balance | null>(null)
   const [reminding, setReminding] = useState<Balance | null>(null)
   const [rating, setRating] = useState<Balance | null>(null)
@@ -68,14 +71,17 @@ function FeesPage() {
   const [planOpen, setPlanOpen] = useState(false)
 
   const name = (id: string) => fullName(students.data?.find((s) => s.id === id))
+  // Search by the student's name or the month's label
+  const q = search.trim().toLowerCase()
   const rows = (balances.data ?? []).filter((b) =>
-    filter === 'all'
+    (!q || name(b.student_id).toLowerCase().includes(q) || b.label.toLowerCase().includes(q)) &&
+    (filter === 'all'
       ? true
       : filter === 'overdue'
         ? b.payment_status === 'overdue'
         : filter === 'toRemind'
           ? b.payment_status === 'overdue' && !reminders.data?.[b.id]
-          : ['pending', 'partial', 'overdue'].includes(b.payment_status),
+          : ['pending', 'partial', 'overdue'].includes(b.payment_status)),
   )
   const totals = useMemo(() => {
     const all = balances.data ?? []
@@ -118,12 +124,31 @@ function FeesPage() {
         <StatCard value={formatMoney(totals.due - totals.paid, locale)} label={t('fees.totalRemaining')} />
         <StatCard value={totals.overdue} label={t('fees.overdueCount')} />
       </Stack>
-      <ToggleButtonGroup exclusive size="small" value={filter} onChange={(_, v) => v && setFilter(v)} sx={{ mb: 2 }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 2, alignItems: { sm: 'center' } }}>
+      <TextField
+        size="small"
+        placeholder={t('fees.search')}
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        sx={{ width: { xs: '100%', sm: 300 } }}
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchOutlined fontSize="small" />
+              </InputAdornment>
+            ),
+          },
+          htmlInput: { 'aria-label': t('fees.search') },
+        }}
+      />
+      <ToggleButtonGroup exclusive size="small" value={filter} onChange={(_, v) => v && setFilter(v)}>
         <ToggleButton value="all">{t('common.all')}</ToggleButton>
         <ToggleButton value="open">{t('fees.open')}</ToggleButton>
         <ToggleButton value="overdue">{t('fees.overdue')}</ToggleButton>
         {ctx.canFees && <ToggleButton value="toRemind">{t('fees.toRemind')}</ToggleButton>}
       </ToggleButtonGroup>
+      </Stack>
       <QueryState
         query={balances}
         rows={5}

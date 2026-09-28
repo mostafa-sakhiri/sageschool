@@ -448,6 +448,7 @@
   "fees.remindStub": "Le bouton WhatsApp ouvre votre WhatsApp avec le rappel déjà écrit et enregistre la relance.",
   "fees.remindTitle": "Relancer un paiement en retard",
   "fees.remindedOn": "le {date} ({n}×)",
+  "fees.search": "Rechercher un élève ou un mois",
   "fees.status.cancelled": "annulée",
   "fees.status.overdue": "en retard",
   "fees.status.paid": "payée",
