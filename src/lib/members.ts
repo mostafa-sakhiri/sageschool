@@ -134,12 +134,24 @@ export const createPasswordLink = createServerFn({ method: 'POST' })
     const admin = createServiceClient()
     const { data: target } = await admin
       .from('school_members')
-      .select('role, school_id, user:users(auth_provider_id)')
+      .select('role, school_id, user_id, user:users(auth_provider_id)')
       .eq('id', data.memberId)
       .maybeSingle()
     if (!target || target.school_id !== data.schoolId) throw new Error('Membre introuvable')
-    const allowed = roles.includes('admin') || (roles.includes('staff') && ['parent', 'student'].includes(target.role))
-    if (!allowed) throw new Error('Droits insuffisants pour ce membre')
+
+    // The link resets the whole account, not one membership: every role the
+    // person holds, in any school and any status, must be one the caller manages.
+    // Otherwise an office could take over an account that also belongs to
+    // another school (or to someone above them here).
+    const { data: held, error: heldError } = await admin
+      .from('school_members')
+      .select('role, school_id')
+      .eq('user_id', target.user_id)
+    if (heldError || !held) throw new Error(heldError?.message ?? 'Membre introuvable')
+    const manageable = (m: { role: string; school_id: string }) =>
+      m.school_id === data.schoolId &&
+      (roles.includes('admin') || (roles.includes('staff') && ['parent', 'student'].includes(m.role)))
+    if (!held.every(manageable)) throw new Error('Droits insuffisants pour ce membre')
 
     const authId = (target.user as unknown as { auth_provider_id: string | null } | null)?.auth_provider_id
     if (!authId) throw new Error("Ce membre n'a pas encore de compte de connexion")
