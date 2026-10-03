@@ -1,12 +1,12 @@
 import { useContext, useEffect, useState } from 'react'
 import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Box, Button, FormControlLabel, Paper, Stack, Step, StepLabel, Stepper, Switch, Tab, Tabs, Typography } from '@mui/material'
+import { Alert, Box, Button, Paper, Stack, Step, StepLabel, Stepper, TextField, Typography } from '@mui/material'
 import { OnboardingShell } from '#/components/OnboardingShell'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, Card, Tag } from '#/components/ui'
 import { EmptyState, Loading } from '#/components/states'
-import { SchoolContext, staffFeesAccess } from '#/lib/session'
+import { SchoolContext } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { CreateSchool, StepActions } from '#/features/setup/CreateSchool'
 import { ScheduleEditor, pauseLabel } from '#/features/setup/ScheduleEditor'
@@ -17,16 +17,19 @@ import { errorMessage, must } from '#/lib/errors'
 import { YearForm, YearSection } from '#/features/setup/YearSection'
 import { HoursSection } from '#/features/setup/HoursSection'
 import { RoomsSection } from '#/features/setup/RoomsSection'
+import { RolesSection } from '#/features/setup/AccessSection'
 import { ImportPanel } from '#/features/import/ImportZone'
 import { formatMinutes, nodeName, nodesQuery } from '#/features/structure/api'
 import { tokens } from '#/theme/theme'
 
-type Search = { step?: number; tab?: string; new?: boolean }
+type Search = { step?: number; tab?: string; new?: boolean; role?: string }
 
 export const Route = createFileRoute('/_app/setup')({
   validateSearch: (s: Record<string, unknown>): Search => ({
     step: s.step ? Number(s.step) : undefined,
     tab: typeof s.tab === 'string' ? s.tab : undefined,
+    // Réglages › Rôles: the role opened
+    role: typeof s.role === 'string' ? s.role : undefined,
     // ?new=1: create another school while already a member of one
     new: s.new === true || s.new === 1 || s.new === '1' || undefined,
   }),
@@ -148,30 +151,27 @@ function ContinueWizard({ step, go }: { step: number; go: (s: number) => void })
   )
 }
 
-const TABS = ['school', 'schedule', 'structure', 'years', 'hours', 'rooms'] as const
+// The sections, reached from the settings nav in the sidebar (AppShell)
+const TABS = ['school', 'roles', 'schedule', 'structure', 'years', 'hours', 'rooms'] as const
 
 function Settings() {
   const { t } = useI18n()
   const ctx = useContext(SchoolContext)!
-  const { tab } = Route.useSearch()
-  const navigate = useNavigate()
+  const search = Route.useSearch()
+  const { tab } = search
   const current = (TABS as readonly string[]).includes(tab ?? '') ? tab! : 'school'
+  // The year's sections say which year they change
+  const yearScoped = current === 'hours'
+  const title = t(`settings.tab.${current}`)
 
   return (
-    <AppShell title={t('nav.settings')}>
-      <PageIntro title={ctx.school.name} subtitle={t('settings.subtitle')} />
-      <Tabs
-        value={current}
-        onChange={(_, v) => navigate({ to: '/setup', search: { tab: v } })}
-        variant="scrollable"
-        allowScrollButtonsMobile
-        sx={{ mb: 2.5, borderBottom: `1px solid ${tokens.line}` }}
-      >
-        {TABS.map((k) => (
-          <Tab key={k} value={k} label={t(`settings.tab.${k}`)} />
-        ))}
-      </Tabs>
+    <AppShell title={title}>
+      <PageIntro
+        title={title}
+        subtitle={yearScoped && ctx.year ? t('settings.forYear', { name: ctx.year.name }) : t(`settings.hint.${current}`)}
+      />
       {current === 'school' && <SchoolInfo />}
+      {current === 'roles' && <RolesSection roleId={search.role} />}
       {current === 'schedule' && <ScheduleSettings />}
       {current === 'structure' && <TreeSection schoolId={ctx.school.id} />}
       {current === 'years' && <YearSection schoolId={ctx.school.id} />}
@@ -190,20 +190,11 @@ function SchoolInfo() {
   const { t, locale } = useI18n()
   const ctx = useContext(SchoolContext)!
   const navigate = useNavigate()
-  const s = ctx.school.settings as { city?: string; address?: string }
   const horaires = readHoraires(ctx.school.settings)
   const dayNames = t('setup.dayNames').split(',')
   return (
     <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
-      <Card>
-        <Typography variant="h5" sx={{ mb: 1.5 }}>
-          {t('setup.schoolTitle')}
-        </Typography>
-        <Info label={t('setup.schoolName')} value={ctx.school.name} />
-        <Info label={t('setup.city')} value={s.city || '—'} />
-        <Info label={t('setup.address')} value={s.address || '—'} />
-      </Card>
-      {ctx.isAdmin && <StaffPermissions />}
+      <SchoolIdentity />
       <Card>
         <Stack direction="row" sx={{ alignItems: 'center', mb: 1.5 }}>
           <Typography variant="h5" sx={{ flex: 1 }}>
@@ -236,20 +227,30 @@ function SchoolInfo() {
   )
 }
 
-// What the secrétariat may do: the admin decides (schools.settings; RLS reads
-// the same flag through private.can_manage_fees).
-function StaffPermissions() {
+// Name, city, address, founding date: schools.name + schools.settings
+function SchoolIdentity() {
   const { t } = useI18n()
   const ctx = useContext(SchoolContext)!
   const router = useRouter()
   const queryClient = useQueryClient()
-  const on = staffFeesAccess(ctx.school.settings)
+  const s = ctx.school.settings as { city?: string; address?: string; founded_on?: string | null }
+  const initial = { name: ctx.school.name, city: s.city ?? '', address: s.address ?? '', founded: s.founded_on ?? '' }
+  const [form, setForm] = useState(initial)
+  const dirty = (Object.keys(initial) as (keyof typeof initial)[]).some((k) => form[k].trim() !== initial[k])
   const save = useMutation({
-    mutationFn: async (value: boolean) =>
+    mutationFn: async () =>
       must(
         await supabase
           .from('schools')
-          .update({ settings: { ...ctx.school.settings, staff_fees_access: value } as Json })
+          .update({
+            name: form.name.trim(),
+            settings: {
+              ...(ctx.school.settings as Record<string, unknown>),
+              city: form.city.trim(),
+              address: form.address.trim(),
+              founded_on: form.founded || null,
+            } as Json,
+          })
           .eq('id', ctx.school.id),
       ),
     onSuccess: async () => {
@@ -257,22 +258,31 @@ function StaffPermissions() {
       await router.invalidate()
     },
   })
+  const field = (k: keyof typeof initial) => ({
+    value: form[k],
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      save.reset()
+      setForm({ ...form, [k]: e.target.value })
+    },
+  })
   return (
     <Card>
-      <Typography variant="h5" sx={{ mb: 0.5 }}>
-        {t('settings.staffAccess')}
+      <Typography variant="h5" sx={{ mb: 2 }}>
+        {t('setup.schoolTitle')}
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-        {t('settings.staffAccessHint')}
-      </Typography>
-      <FormControlLabel
-        control={<Switch checked={on} disabled={save.isPending} onChange={(e) => save.mutate(e.target.checked)} />}
-        label={t('settings.staffFees')}
-      />
-      <Typography variant="body2" color="text.secondary">
-        {on ? t('settings.staffFeesOn') : t('settings.staffFeesOff')}
-      </Typography>
-      {save.isError && <Alert severity="error" sx={{ mt: 1 }}>{errorMessage(save.error, t)}</Alert>}
+      <Stack spacing={2}>
+        <TextField label={t('setup.schoolName')} required {...field('name')} />
+        <TextField label={t('setup.city')} {...field('city')} />
+        <TextField label={t('setup.address')} multiline minRows={2} {...field('address')} />
+        <TextField label={t('setup.founded')} type="date" slotProps={{ inputLabel: { shrink: true } }} {...field('founded')} />
+        {save.isError && <Alert severity="error">{errorMessage(save.error, t)}</Alert>}
+        {save.isSuccess && !dirty && <Alert severity="success">{t('common.saved')}</Alert>}
+        <Box>
+          <Button variant="contained" disabled={!dirty || !form.name.trim()} loading={save.isPending} onClick={() => save.mutate()}>
+            {t('common.save')}
+          </Button>
+        </Box>
+      </Stack>
     </Card>
   )
 }

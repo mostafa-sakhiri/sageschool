@@ -1727,6 +1727,7 @@ export type Database = {
       school_members: {
         Row: {
           created_at: string
+          custom_role_id: string | null
           id: string
           is_assistant: boolean
           role: string
@@ -1737,6 +1738,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          custom_role_id?: string | null
           id?: string
           is_assistant?: boolean
           role: string
@@ -1747,6 +1749,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          custom_role_id?: string | null
           id?: string
           is_assistant?: boolean
           role?: string
@@ -1756,6 +1759,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "school_members_custom_role_fkey"
+            columns: ["custom_role_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "school_roles"
+            referencedColumns: ["id", "school_id"]
+          },
           {
             foreignKeyName: "school_members_school_id_fkey"
             columns: ["school_id"]
@@ -1794,6 +1804,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "school_modules_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      school_roles: {
+        Row: {
+          base_role: string
+          builtin_key: string | null
+          created_at: string
+          id: string
+          name: string | null
+          permissions: string[]
+          school_id: string
+          updated_at: string
+        }
+        Insert: {
+          base_role: string
+          builtin_key?: string | null
+          created_at?: string
+          id?: string
+          name?: string | null
+          permissions?: string[]
+          school_id: string
+          updated_at?: string
+        }
+        Update: {
+          base_role?: string
+          builtin_key?: string | null
+          created_at?: string
+          id?: string
+          name?: string | null
+          permissions?: string[]
+          school_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "school_roles_school_id_fkey"
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
@@ -2786,6 +2837,10 @@ export type Database = {
         }
         Returns: number
       }
+      can_access: {
+        Args: { p_permission: string; p_school_id: string }
+        Returns: boolean
+      }
       change_member_role: {
         Args: { p_member_id: string; p_role: string }
         Returns: string
@@ -2809,6 +2864,7 @@ export type Database = {
         Args: { p_name: string; p_settings?: Json; p_slug: string }
         Returns: string
       }
+      default_role_permissions: { Args: { p_key: string }; Returns: string[] }
       delete_student: { Args: { p_student_id: string }; Returns: undefined }
       fork_timetable_version: {
         Args: {
@@ -2836,6 +2892,7 @@ export type Database = {
         Args: { p_justification: string; p_record_id: string }
         Returns: undefined
       }
+      member_permissions: { Args: { p_member_id: string }; Returns: string[] }
       publish_announcement: {
         Args: { p_announcement_id: string }
         Returns: number

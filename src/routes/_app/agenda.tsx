@@ -12,7 +12,7 @@ import AddOutlined from '@mui/icons-material/AddOutlined'
 import HowToRegOutlined from '@mui/icons-material/HowToRegOutlined'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, SectionTitle, Tag, type Tone } from '#/components/ui'
-import { EmptyState, ErrorState, Loading } from '#/components/states'
+import { EmptyState, ErrorState, Loading, NotFound } from '#/components/states'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
@@ -55,10 +55,13 @@ function AgendaPage() {
   const { days: schoolDays, start, end } = useSchoolDays()
   const [monday, setMonday] = useState(mondayOf(todayIso()))
   const [editing, setEditing] = useState<Partial<Appointment> | null>(null)
+  const canRead = ctx.can('agenda.view')
+  const canWrite = ctx.can('agenda.manage')
   const members = useQuery(membersQuery(ctx.school.id))
   const names = Object.fromEntries((members.data ?? []).map((m) => [m.id, m.user?.full_name ?? '']))
 
   const week = useQuery({
+    enabled: canRead,
     queryKey: ['school', ctx.school.id, 'appointments', monday],
     queryFn: async () =>
       must(
@@ -75,6 +78,10 @@ function AgendaPage() {
   // Quick action / pre-registration: open the dialog once, then clean the URL
   useEffect(() => {
     if (!search.new && !search.preinscription) return
+    if (!canWrite) {
+      navigateSelf({ search: {}, replace: true })
+      return
+    }
     const open = async () => {
       if (search.preinscription) {
         const p = must(
@@ -91,7 +98,7 @@ function AgendaPage() {
       navigateSelf({ search: {}, replace: true })
     }
     void open()
-  }, [search.new, search.preinscription, navigateSelf, t])
+  }, [search.new, search.preinscription, navigateSelf, t, canWrite])
 
   // Saturday mornings etc.: show any day that has an appointment
   const days = useMemo(() => {
@@ -116,15 +123,24 @@ function AgendaPage() {
   const today = todayIso()
   const todays = (week.data ?? []).filter((a) => localDate(a.starts_at) === today)
 
+  if (!canRead)
+    return (
+      <AppShell title={t('nav.agenda')}>
+        <NotFound />
+      </AppShell>
+    )
+
   return (
     <AppShell title={t('nav.agenda')}>
       <PageIntro
         title={t('agenda.title')}
         subtitle={t('agenda.subtitle')}
         actions={
-          <Button variant="contained" startIcon={<AddOutlined />} onClick={() => setEditing({})}>
-            {t('agenda.new')}
-          </Button>
+          canWrite && (
+            <Button variant="contained" startIcon={<AddOutlined />} onClick={() => setEditing({})}>
+              {t('agenda.new')}
+            </Button>
+          )
         }
       />
       <Stack spacing={2}>
@@ -151,12 +167,14 @@ function AgendaPage() {
             blocks={blocks}
             dayStart={start}
             dayEnd={end}
-            onEmptyClick={(d, time) => setEditing({ starts_at: toIso(addDays(monday, d - 1), time), ends_at: toIso(addDays(monday, d - 1), plusMinutes(time, 30)) })}
+            onEmptyClick={!canWrite ? undefined : (d, time) => setEditing({ starts_at: toIso(addDays(monday, d - 1), time), ends_at: toIso(addDays(monday, d - 1), plusMinutes(time, 30)) })}
           />
         )}
-        <Typography variant="body2" color="text.secondary">
-          {t('agenda.clickHint')}
-        </Typography>
+        {canWrite && (
+          <Typography variant="body2" color="text.secondary">
+            {t('agenda.clickHint')}
+          </Typography>
+        )}
         {monday === mondayOf(today) && (
           <>
             <SectionTitle>{t('agenda.today')}</SectionTitle>
@@ -180,6 +198,7 @@ function AgendaPage() {
 function TodayRow({ a, host, onOpen }: { a: Appointment; host?: string; onOpen: () => void }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
+  const canWrite = ctx.can('agenda.manage')
   const navigate = useNavigate()
   const toPrereg = () =>
     navigate({ to: '/preregistrations', search: { new: true, parent: a.visitor_name ?? undefined, phone: a.visitor_phone ?? undefined, appointment: a.id } })
@@ -207,12 +226,12 @@ function TodayRow({ a, host, onOpen }: { a: Appointment; host?: string; onOpen: 
           text={t('wa.appointment', { name: a.visitor_name ?? '', date: formatDate(localDate(a.starts_at), locale, { weekday: 'long', day: 'numeric', month: 'long' }), time: localTime(a.starts_at), school: ctx.school.name })}
         />
       )}
-      {a.kind === 'visit_prospect' && !a.preinscription_id && (
+      {canWrite && ctx.can('preregistrations.manage') && a.kind === 'visit_prospect' && !a.preinscription_id && (
         <Button size="small" startIcon={<HowToRegOutlined />} onClick={toPrereg}>
           {t('agenda.toPrereg')}
         </Button>
       )}
-      {a.status === 'planned' && (
+      {canWrite && a.status === 'planned' && (
         <Stack direction="row" spacing={0.5}>
           <Button size="small" variant="outlined" onClick={() => setStatus.mutate('done')} loading={setStatus.isPending}>
             {t('agenda.markDone')}

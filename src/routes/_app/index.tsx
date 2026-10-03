@@ -119,7 +119,7 @@ function OfficeDash() {
   const ctx = useSchool()
   const students = useQuery(studentsQuery(ctx.school.id))
   const classes = useQuery({ ...classesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year })
-  const cases = useQuery(casesQuery(ctx.school.id))
+  const cases = useQuery({ ...casesQuery(ctx.school.id), enabled: ctx.can('messages.view') })
   const balances = useQuery({ ...balancesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year && ctx.canFees })
   const published = useQuery({
     queryKey: ['school', ctx.school.id, 'published-classes'],
@@ -127,11 +127,12 @@ function OfficeDash() {
       new Set(must(await supabase.from('timetable_versions').select('class_id').eq('school_id', ctx.school.id).eq('status', 'published')).map((v) => v.class_id)),
   })
   const today = todayIso()
-  const alerts = useQuery(alertsQuery(ctx.school.id))
-  const birthdayPlans = useQuery(birthdayPlansQuery(ctx.school.id))
-  const preregs = useQuery(preregsQuery(ctx.school.id))
+  const alerts = useQuery({ ...alertsQuery(ctx.school.id), enabled: ctx.can('attendance.view_all') })
+  const birthdayPlans = useQuery({ ...birthdayPlansQuery(ctx.school.id), enabled: ctx.can('events.birthdays') })
+  const preregs = useQuery({ ...preregsQuery(ctx.school.id), enabled: ctx.can('preregistrations.view') })
   const appointments = useQuery({
     queryKey: ['school', ctx.school.id, 'appointments', 'day', today],
+    enabled: ctx.can('agenda.view'),
     queryFn: async () =>
       must(
         await supabase
@@ -167,7 +168,7 @@ function OfficeDash() {
 
   if (!ctx.year)
     return (
-      <TodoList items={[{ key: 'year', title: t('year.none'), detail: t('year.noneHint'), to: '/setup', action: t('dash.createYear'), level: 'high' as const }]} />
+      <TodoList items={[{ key: 'year', title: t('year.none'), detail: t('year.noneHint'), to: '/setup', search: { tab: 'years' }, action: t('dash.createYear'), level: 'high' as const }]} />
     )
   if (students.isPending || classes.isPending) return <Loading rows={5} />
   if (students.isError || classes.isError) return <ErrorState error={students.error ?? classes.error} onRetry={() => (students.refetch(), classes.refetch())} />
@@ -190,7 +191,20 @@ function OfficeDash() {
   const birthdays = birthdayPlans.data ? birthdaysBetween(studentRows, ...twoWeeks(today), birthdayPlans.data).filter((b) => b.status === 'to_organize') : []
 
   const nameOf = (id: string) => fullName(studentRows.find((s) => s.id === id))
-  const todos: Todo[] = [
+  // Each to-do belongs to a module; a role only gets those it may act on
+  const TODO_ACCESS: Record<string, boolean> = {
+    alerts: ctx.can('attendance.alerts'),
+    agenda: ctx.can('agenda.view'),
+    birthdays: ctx.can('events.manage'),
+    prereg: ctx.can('preregistrations.manage'),
+    cases: ctx.can('messages.reply'),
+    classes: ctx.isAdmin,
+    tt: ctx.isAdmin,
+    unplaced: ctx.can('students.edit'),
+    parents: ctx.can('students.families'),
+    fees: ctx.can('fees.view'),
+  }
+  const allTodos: Todo[] = [
     ...(openAlerts.length
       ? [{ key: 'alerts', title: t('dash.openAlerts', { n: openAlerts.length }), detail: openAlerts.slice(0, 3).map((a) => nameOf(a.student_id)).join(', '), to: '/attendance', search: { tab: 'alerts' }, action: t('dash.notifyParents'), level: 'critical' as const }]
       : []),
@@ -238,6 +252,7 @@ function OfficeDash() {
         ]
       : []),
   ]
+  const todos = allTodos.filter((x) => TODO_ACCESS[x.key] ?? true)
   const enrolled = studentRows.filter((s) => currentEnrollment(s, ctx.year?.id)).length
   const absentCount = (absences.data ?? []).filter((a) => a.status === 'absent').length
 
@@ -247,7 +262,7 @@ function OfficeDash() {
         <StatCard value={enrolled} label={t('dash.enrolled')} />
         <StatCard value={classRows.length} label={t('nav.classes')} />
         <StatCard value={publishedCount} label={t('dash.publishedTimetables')} />
-        <StatCard value={absentCount} label={t('dash.absentToday')} />
+        {ctx.can('attendance.view_all') && <StatCard value={absentCount} label={t('dash.absentToday')} />}
       </Stack>
       <SectionTitle
         aside={
@@ -400,7 +415,7 @@ function ParentDash() {
   const kids = useQuery(studentsQuery(ctx.school.id))
   const balances = useQuery({ ...balancesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year })
   const announcements = useQuery(announcementsQuery(ctx.school.id))
-  const cases = useQuery(casesQuery(ctx.school.id))
+  const cases = useQuery({ ...casesQuery(ctx.school.id), enabled: ctx.can('messages.view') })
   const today = todayIso()
   const absencesToday = useQuery({
     queryKey: ['school', ctx.school.id, 'attendance', 'family-today', today],

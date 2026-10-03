@@ -28,7 +28,7 @@ import {
 import SearchOutlined from '@mui/icons-material/SearchOutlined'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, StatCard, Tag, fullName, type Tone } from '#/components/ui'
-import { EmptyState, QueryState } from '#/components/states'
+import { EmptyState, NotFound, QueryState } from '#/components/states'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
@@ -58,6 +58,11 @@ const STATUS_TONE: Record<Balance['payment_status'], Tone> = {
 function FeesPage() {
   const { t, locale } = useI18n()
   const ctx = useSchool()
+  // Office view with fees read; changes (plan, rate, payment, reminder) need write
+  const canPlans = ctx.can('fees.plans')
+  const canCollect = ctx.can('fees.collect')
+  const canRemind = ctx.can('fees.remind')
+  const canAct = canPlans || canCollect || canRemind
   const balances = useQuery({ ...balancesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year && (ctx.canFees || !ctx.isOffice) })
   const students = useQuery(studentsQuery(ctx.school.id))
   const [filter, setFilter] = useState<'all' | 'open' | 'overdue' | 'toRemind'>('all')
@@ -119,6 +124,13 @@ function FeesPage() {
         <EmptyState title={t('fees.noAccess')} hint={t('fees.noAccessHint')} />
       </AppShell>
     )
+  // Parents have their own view; anyone else needs fees read
+  if (!ctx.canFees && ctx.role !== 'parent')
+    return (
+      <AppShell title={t('nav.fees')}>
+        <NotFound />
+      </AppShell>
+    )
   if (!ctx.year)
     return (
       <AppShell title={t('nav.fees')}>
@@ -132,7 +144,7 @@ function FeesPage() {
         title={ctx.canFees ? t('fees.title') : t('fees.titleParent')}
         subtitle={ctx.canFees ? t('fees.subtitle') : t('fees.subtitleParent')}
         actions={
-          ctx.canFees && (
+          canPlans && (
             <Button variant="contained" onClick={() => setPlanOpen(true)}>
               {t('fees.generate')}
             </Button>
@@ -208,7 +220,7 @@ function FeesPage() {
       <QueryState
         query={balances}
         rows={5}
-        empty={(d) => (d.length === 0 ? <EmptyState title={t('fees.empty')} hint={ctx.canFees ? t('fees.emptyHint') : undefined} /> : null)}
+        empty={(d) => (d.length === 0 ? <EmptyState title={t('fees.empty')} hint={canPlans ? t('fees.emptyHint') : undefined} /> : null)}
       >
         {() => (
           <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
@@ -222,7 +234,7 @@ function FeesPage() {
                   <TableCell align="right">{t('fees.paid')}</TableCell>
                   <TableCell align="right">{t('fees.remaining')}</TableCell>
                   <TableCell>{t('common.status')}</TableCell>
-                  {ctx.canFees && <TableCell />}
+                  {canAct && <TableCell />}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -252,18 +264,20 @@ function FeesPage() {
                         return <Tag tone={STATUS_TONE[b.payment_status]} label={t(`fees.status.${b.payment_status}`)} />
                       })()}
                     </TableCell>
-                    {ctx.canFees && (
+                    {canAct && (
                       <TableCell align="right">
                         <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
-                          {b.payment_status === 'overdue' && (
+                          {canRemind && b.payment_status === 'overdue' && (
                             <Button size="small" color="warning" onClick={() => setReminding(b)}>
                               {t('fees.remind')}
                             </Button>
                           )}
-                          <Button size="small" color="inherit" onClick={() => setRating(b)}>
-                            {t('fees.rate')}
-                          </Button>
-                          {Number(b.amount_remaining) > 0 && b.payment_status !== 'cancelled' && (
+                          {canPlans && (
+                            <Button size="small" color="inherit" onClick={() => setRating(b)}>
+                              {t('fees.rate')}
+                            </Button>
+                          )}
+                          {canCollect && Number(b.amount_remaining) > 0 && b.payment_status !== 'cancelled' && (
                             <Button size="small" onClick={() => setPaying(b)}>
                               {t('fees.record')}
                             </Button>

@@ -23,7 +23,7 @@ import PersonAddOutlined from '@mui/icons-material/PersonAddOutlined'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, Tag, initials } from '#/components/ui'
 import { EmptyState, QueryState } from '#/components/states'
-import { STAFF_ROLES, staffRoleOf, useSchool, type Role, type StaffRole } from '#/lib/session'
+import { STAFF_ROLES, staffRoleOf, useSchool, type Role} from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
 import { errorMessage, must } from '#/lib/errors'
@@ -62,7 +62,7 @@ function TeamPage() {
   const navigateSelf = Route.useNavigate()
   const [importing, setImporting] = useState(false)
   const [editing, setEditing] = useState<MemberRow | null>(null)
-  const [changed, setChanged] = useState<{ outcome: RoleOutcome; name: string; role: StaffRole } | null>(null)
+  const [changed, setChanged] = useState<{ outcome: RoleOutcome; name: string; role: string } | null>(null)
   useEffect(() => {
     if (!search.import) return
     setImporting(true)
@@ -104,7 +104,7 @@ function TeamPage() {
       </Alert>
       {changed && changed.outcome !== 'unchanged' && (
         <Alert severity={changed.outcome === 'added' ? 'info' : 'success'} onClose={() => setChanged(null)} sx={{ mb: 2 }}>
-          {t(`team.roleChanged.${changed.outcome}`, { name: changed.name, role: t(`role.${changed.role}`) })}
+          {t(`team.roleChanged.${changed.outcome}`, { name: changed.name, role: changed.role })}
         </Alert>
       )}
       {toggle.isError && <Alert severity="error" sx={{ mb: 2 }}>{errorMessage(toggle.error, t)}</Alert>}
@@ -169,7 +169,7 @@ function TeamPage() {
                       </TableCell>
                       <TableCell>
                         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-                          <Tag tone={m.role === 'admin' ? 'ok' : m.role === 'teacher' ? 'info' : 'neutral'} label={t(`role.${staffRoleOf(m)}`)} />
+                          <Tag tone={m.role === 'admin' ? 'ok' : m.role === 'teacher' ? 'info' : 'neutral'} label={m.custom_role?.name ?? t(`role.${staffRoleOf(m)}`)} />
                           {STAFF_MEMBER_ROLES.includes(m.role) && m.user?.id !== ctx.user.id && (
                             <Tooltip title={t('team.changeRole')}>
                               <IconButton size="small" aria-label={`${t('team.changeRole')} — ${m.user?.full_name}`} onClick={() => setEditing(m)}>

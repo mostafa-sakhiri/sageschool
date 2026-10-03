@@ -101,3 +101,21 @@ export function QueryState<T>({
   if (e) return <>{e}</>
   return <>{children(data)}</>
 }
+
+// A module the role may only read: a notice, and every control inside is
+// disabled (a disabled fieldset disables its buttons and fields natively).
+// The database refuses the writes anyway; this only keeps the page honest.
+export function ReadOnly({ when, children }: { when: boolean; children: React.ReactNode }) {
+  const t = useT()
+  if (!when) return <>{children}</>
+  return (
+    <>
+      <Alert severity="info" sx={{ mb: 2 }}>
+        {t('access.readOnly')}
+      </Alert>
+      <Box component="fieldset" disabled sx={{ border: 0, p: 0, m: 0, minWidth: 0 }}>
+        {children}
+      </Box>
+    </>
+  )
+}

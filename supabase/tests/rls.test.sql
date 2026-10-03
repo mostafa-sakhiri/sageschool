@@ -16,7 +16,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(81);
+SELECT plan(105);
 
 -- Impersonate a user: JWT claims + the authenticated role (RESET ROLE first).
 CREATE FUNCTION pg_temp.login(p_email text) RETURNS void LANGUAGE plpgsql AS $$
@@ -320,16 +320,18 @@ RESET ROLE;
 -- ---------------------------------------------------------------------
 -- Office follow-up (migration 20260926090000)
 -- ---------------------------------------------------------------------
--- Scolarité: the secrétariat has no access until the admin allows it
+-- Scolarité: the secrétariat has no access until the admin gives its role the
+-- fees permissions (migration 20261003120000; was settings.staff_fees_access)
 SELECT pg_temp.login('staff.a@test.ma');
 SELECT is((SELECT count(*) FROM fee_installments WHERE school_id = '5c000000-0000-0000-0000-00000000000a')::int, 0,
-  'fees: staff sees no installment while staff_fees_access is off');
+  'fees: staff sees no installment without the fees permissions');
 SELECT throws_ok($$INSERT INTO payments (school_id, installment_id, amount, recorded_by_member_id)
                    VALUES ('5c000000-0000-0000-0000-00000000000a', '74000000-0000-0000-0000-000000000001', 100,
                            'b1000000-0000-0000-0000-000000000002')$$,
   '42501', NULL, 'fees: staff cannot record a payment while access is off');
 RESET ROLE;
-UPDATE schools SET settings = settings || '{"staff_fees_access": true}' WHERE id = '5c000000-0000-0000-0000-00000000000a';
+UPDATE school_roles SET permissions = permissions || ARRAY['fees.view', 'fees.collect', 'fees.remind', 'fees.plans']
+WHERE school_id = '5c000000-0000-0000-0000-00000000000a' AND builtin_key = 'staff';
 SELECT pg_temp.login('staff.a@test.ma');
 SELECT is((SELECT count(*) FROM fee_installments WHERE school_id = '5c000000-0000-0000-0000-00000000000a')::int, 2,
   'fees: staff sees the installments once the admin allows it');
@@ -456,6 +458,87 @@ SELECT throws_ok($$INSERT INTO birthday_plans (school_id, student_id, year, stat
 RESET ROLE;
 SELECT pg_temp.login('admin.b@test.ma');
 SELECT is((SELECT count(*) FROM birthday_plans)::int, 0, 'birthdays: admin B sees none of school A''s');
+RESET ROLE;
+
+-- Roles and permissions (migrations 20261003090000, 20261003120000).
+-- « Comptable » built on staff: fees only; « Professeur principal » built on
+-- teacher: reads every class's attendance. T2 takes the second.
+SELECT is((SELECT count(*) FROM school_roles WHERE builtin_key IS NOT NULL AND school_id IN ('5c000000-0000-0000-0000-00000000000a', '5c000000-0000-0000-0000-00000000000b'))::int, 4,
+  'roles: every school has its built-in secrétariat and professeur');
+INSERT INTO auth.users (id, email, aud, role, raw_user_meta_data) VALUES
+  ('a1000000-0000-0000-0000-000000000008', 'compta.a@test.ma', 'authenticated', 'authenticated', '{"full_name":"Compta A"}');
+INSERT INTO school_roles (id, school_id, name, base_role, permissions) VALUES
+  ('7a000000-0000-0000-0000-000000000001', '5c000000-0000-0000-0000-00000000000a', 'Comptable', 'staff', ARRAY['fees.view', 'fees.collect']),
+  ('7a000000-0000-0000-0000-000000000002', '5c000000-0000-0000-0000-00000000000a', 'Professeur principal', 'teacher', ARRAY['attendance.take_own', 'homework.own', 'attendance.view_all']);
+INSERT INTO school_members (id, school_id, user_id, role, custom_role_id)
+SELECT 'b1000000-0000-0000-0000-000000000008', '5c000000-0000-0000-0000-00000000000a', u.id, 'staff', '7a000000-0000-0000-0000-000000000001'
+FROM users u WHERE u.email = 'compta.a@test.ma';
+UPDATE school_members SET custom_role_id = '7a000000-0000-0000-0000-000000000002' WHERE id = 'b1000000-0000-0000-0000-000000000004';
+
+SELECT throws_ok($$UPDATE school_members SET custom_role_id = '7a000000-0000-0000-0000-000000000002' WHERE id = 'b1000000-0000-0000-0000-000000000002'$$,
+  '23514', NULL, 'roles: a teacher-based role cannot go to a staff member');
+SELECT throws_ok($$UPDATE school_members SET custom_role_id = (SELECT id FROM school_roles WHERE school_id = '5c000000-0000-0000-0000-00000000000a' AND builtin_key = 'teacher')
+                   WHERE id = 'b1000000-0000-0000-0000-000000000003'$$,
+  '23514', NULL, 'roles: a built-in role is not given through custom_role_id');
+SELECT throws_ok($$INSERT INTO school_roles (school_id, name, base_role, permissions) VALUES ('5c000000-0000-0000-0000-00000000000a', 'X', 'staff', ARRAY['rooms.edit'])$$,
+  '22023', NULL, 'roles: unknown permissions are refused (school settings are no permission)');
+
+SELECT pg_temp.login('compta.a@test.ma');
+SELECT is((SELECT count(*) FROM fee_installments WHERE school_id = '5c000000-0000-0000-0000-00000000000a')::int, 2, 'comptable: sees the school''s installments');
+SELECT lives_ok($$INSERT INTO payments (school_id, installment_id, amount, recorded_by_member_id)
+                  VALUES ('5c000000-0000-0000-0000-00000000000a', '74000000-0000-0000-0000-000000000002', 10, 'b1000000-0000-0000-0000-000000000008')$$,
+  'comptable: collects a payment');
+SELECT throws_ok($$INSERT INTO payment_reminders (school_id, installment_id, channel)
+                   VALUES ('5c000000-0000-0000-0000-00000000000a', '74000000-0000-0000-0000-000000000001', 'whatsapp')$$,
+  '42501', NULL, 'comptable: cannot remind families (fees.remind not given)');
+SELECT is((SELECT count(*) FROM attendance_records)::int, 0, 'comptable: sees no attendance');
+SELECT is((SELECT count(*) FROM cases)::int, 0, 'comptable: sees no parent messages');
+SELECT is((SELECT count(*) FROM students)::int, 3, 'comptable: still reads the student directory (names on the fees)');
+SELECT is_empty($$UPDATE students SET first_name = 'X' WHERE id = 'c1000000-0000-0000-0000-000000000001' RETURNING id$$,
+  'comptable: cannot edit a student');
+SELECT ok('fees.collect' = ANY (member_permissions('b1000000-0000-0000-0000-000000000008')), 'comptable: member_permissions lists fees.collect');
+SELECT is(member_permissions('b1000000-0000-0000-0000-000000000002'), NULL, 'member_permissions: nobody reads another member''s permissions');
+RESET ROLE;
+
+SELECT pg_temp.login('staff.a@test.ma');
+SELECT ok(member_permissions('b1000000-0000-0000-0000-000000000002') @> private.default_permissions('staff', false),
+  'secrétariat: keeps everything it could do');
+SELECT throws_ok($$INSERT INTO school_roles (school_id, name, base_role) VALUES ('5c000000-0000-0000-0000-00000000000a', 'Z', 'staff')$$,
+  '42501', NULL, 'roles: only the admin creates a role');
+RESET ROLE;
+-- Announcements: drafting and publishing are two permissions
+UPDATE school_roles SET permissions = ARRAY['announcements.create'] WHERE school_id = '5c000000-0000-0000-0000-00000000000a' AND builtin_key = 'staff';
+SELECT pg_temp.login('staff.a@test.ma');
+SELECT lives_ok($$INSERT INTO announcements (id, school_id, author_member_id, title, body, status)
+                  VALUES ('73000000-0000-0000-0000-000000000005', '5c000000-0000-0000-0000-00000000000a', 'b1000000-0000-0000-0000-000000000002', 'Sortie', '...', 'draft')$$,
+  'announcements: create writes a draft');
+SELECT throws_ok($$SELECT publish_announcement('73000000-0000-0000-0000-000000000005')$$,
+  '42501', NULL, 'announcements: publishing needs announcements.publish');
+SELECT is_empty($$UPDATE announcements SET title = 'X' WHERE id = '73000000-0000-0000-0000-000000000001' RETURNING id$$,
+  'announcements: without edit_all, someone else''s announcement cannot be changed');
+RESET ROLE;
+
+SELECT pg_temp.login('admin.a@test.ma');
+SELECT is_empty($$DELETE FROM school_roles WHERE builtin_key = 'staff' RETURNING id$$, 'roles: a built-in role cannot be deleted');
+SELECT lives_ok($$UPDATE school_roles SET permissions = ARRAY['homework.own'] WHERE school_id = '5c000000-0000-0000-0000-00000000000a' AND builtin_key = 'teacher'$$,
+  'roles: the admin changes the professeur''s permissions');
+RESET ROLE;
+
+SELECT pg_temp.login('t1@test.ma');
+SELECT throws_ok($$INSERT INTO attendance_records (school_id, class_id, student_id, session_date, slot_id, status)
+                   VALUES ('5c000000-0000-0000-0000-00000000000a', 'd1000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000003', '2026-10-12', '72000000-0000-0000-0000-000000000001', 'absent')$$,
+  '42501', NULL, 'professeur without attendance.take_own: no roll call, even in their class');
+RESET ROLE;
+
+SELECT pg_temp.login('t2@test.ma');
+SELECT ok((SELECT count(*) FROM attendance_records WHERE class_id = 'd1000000-0000-0000-0000-000000000001') > 0,
+  'professeur principal: reads the attendance of a class not theirs');
+SELECT throws_ok($$INSERT INTO attendance_records (school_id, class_id, student_id, session_date, slot_id, status)
+                   VALUES ('5c000000-0000-0000-0000-00000000000a', 'd1000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000003', '2026-10-12', '72000000-0000-0000-0000-000000000001', 'absent')$$,
+  '42501', NULL, 'professeur principal: cannot take the roll of a class not theirs');
+SELECT throws_ok($$INSERT INTO homework (school_id, class_id, subject_id, author_member_id, title, body)
+                   VALUES ('5c000000-0000-0000-0000-00000000000a', 'd1000000-0000-0000-0000-000000000001', '78000000-0000-0000-0000-00000000000a', 'b1000000-0000-0000-0000-000000000004', 'X', 'Y')$$,
+  '42501', NULL, 'professeur principal: homework only in their own classes');
 RESET ROLE;
 
 SELECT * FROM finish();

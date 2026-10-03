@@ -39,7 +39,7 @@ import EditOutlined from '@mui/icons-material/EditOutlined'
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, Tag, fullName, initials } from '#/components/ui'
-import { EmptyState, QueryState } from '#/components/states'
+import { EmptyState, NotFound, QueryState } from '#/components/states'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
@@ -98,6 +98,14 @@ function StudentsPage() {
   }, [students.data, search])
   const open = (students.data ?? []).find((s) => s.id === openId) ?? null
   const unplaced = (students.data ?? []).filter((s) => s.status === 'active' && !currentEnrollment(s, ctx.year?.id)).length
+  const canCreate = ctx.can('students.create')
+
+  if (!ctx.can('students.view'))
+    return (
+      <AppShell title={t('nav.students')}>
+        <NotFound />
+      </AppShell>
+    )
 
   return (
     <AppShell title={t('nav.students')}>
@@ -105,6 +113,7 @@ function StudentsPage() {
         title={t('students.title')}
         subtitle={t('students.subtitle', { n: students.data?.length ?? 0 })}
         actions={
+          canCreate && (
           <>
             <Button variant="outlined" startIcon={<UploadFileOutlined />} onClick={() => setImporting(true)}>
               {t('import.button')}
@@ -113,6 +122,7 @@ function StudentsPage() {
               {t('students.add')}
             </Button>
           </>
+          )
         }
       />
       <Tabs
@@ -157,9 +167,11 @@ function StudentsPage() {
               title={t('students.empty')}
               hint={t('students.emptyHint')}
               action={
-                <Button variant="contained" onClick={() => setAdding(true)}>
-                  {t('students.add')}
-                </Button>
+                canCreate && (
+                  <Button variant="contained" onClick={() => setAdding(true)}>
+                    {t('students.add')}
+                  </Button>
+                )
               }
             />
           ) : null
@@ -231,8 +243,12 @@ function StudentsPage() {
       </QueryState>
       </>
       )}
-      <ImportDialog open={importing} onClose={() => setImporting(false)} kinds={['students']} title={t('import.studentsTitle')} />
-      <AddStudentDialog open={adding} onClose={() => setAdding(false)} onCreated={(id) => setOpenId(id)} />
+      {canCreate && (
+        <>
+          <ImportDialog open={importing} onClose={() => setImporting(false)} kinds={['students']} title={t('import.studentsTitle')} />
+          <AddStudentDialog open={adding} onClose={() => setAdding(false)} onCreated={(id) => setOpenId(id)} />
+        </>
+      )}
       <Drawer
         anchor="right"
         open={!!open}
@@ -265,6 +281,8 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
   const [deleting, setDeleting] = useState(false)
   const [editing, setEditing] = useState(false)
   const enrollment = currentEnrollment(student, ctx.year?.id)
+  const canEdit = ctx.can('students.edit')
+  const canFamilies = ctx.can('students.families')
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id] })
 
@@ -328,11 +346,13 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
         <Box sx={{ flex: 1 }}>
           <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
             <Typography variant="h3">{fullName(student)}</Typography>
-            <Tooltip title={t('students.edit')}>
-              <IconButton size="small" aria-label={t('students.edit')} onClick={() => setEditing(true)}>
-                <EditOutlined sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Tooltip>
+            {canEdit && (
+              <Tooltip title={t('students.edit')}>
+                <IconButton size="small" aria-label={t('students.edit')} onClick={() => setEditing(true)}>
+                  <EditOutlined sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            )}
           </Stack>
           <Typography color="text.secondary">{enrollment?.class?.name ?? t('students.noClass')}</Typography>
           {student.birth_date ? (
@@ -340,9 +360,11 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
               {t('students.bornOn', { date: formatDate(student.birth_date, locale, { day: 'numeric', month: 'long', year: 'numeric' }), n: ageOn(student.birth_date, todayIso()) })}
             </Typography>
           ) : (
-            <Button size="small" onClick={() => setEditing(true)} sx={{ p: 0, minHeight: 0, alignSelf: 'flex-start' }}>
-              {t('students.addBirthDate')}
-            </Button>
+            canEdit && (
+              <Button size="small" onClick={() => setEditing(true)} sx={{ p: 0, minHeight: 0, alignSelf: 'flex-start' }}>
+                {t('students.addBirthDate')}
+              </Button>
+            )
           )}
         </Box>
         <IconButton aria-label={t('common.close')} onClick={onClose}>
@@ -351,29 +373,34 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
       </Stack>
       {err && <Alert severity="error">{errorMessage(err, t)}</Alert>}
 
-      <TextField
-        select
-        label={t('students.classThisYear')}
-        value={enrollment?.class_id ?? ''}
-        onChange={(e) => e.target.value && place.mutate(e.target.value)}
-        disabled={!ctx.year}
-      >
-        {(classes.data ?? []).map((c) => (
-          <MenuItem key={c.id} value={c.id}>
-            {c.name}
-          </MenuItem>
-        ))}
-      </TextField>
+      {canEdit && (
+        <TextField
+          select
+          label={t('students.classThisYear')}
+          value={enrollment?.class_id ?? ''}
+          onChange={(e) => e.target.value && place.mutate(e.target.value)}
+          disabled={!ctx.year}
+        >
+          {(classes.data ?? []).map((c) => (
+            <MenuItem key={c.id} value={c.id}>
+              {c.name}
+            </MenuItem>
+          ))}
+        </TextField>
+      )}
 
       <Divider />
       <Stack direction="row" sx={{ alignItems: 'center' }}>
         <Typography variant="h5" sx={{ flex: 1 }}>
           {t('students.parents')}
         </Typography>
-        <Button size="small" variant="contained" startIcon={<PersonAddOutlined />} onClick={() => setInviteParent(true)}>
-          {t('students.newParent')}
-        </Button>
+        {canFamilies && (
+          <Button size="small" variant="contained" startIcon={<PersonAddOutlined />} onClick={() => setInviteParent(true)}>
+            {t('students.newParent')}
+          </Button>
+        )}
       </Stack>
+      {canFamilies && (
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Stack spacing={1.5}>
           <Stack direction="row" spacing={1.5}>
@@ -410,6 +437,7 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
           </Stack>
         </Stack>
       </Paper>
+      )}
 
       {student.guardians.length === 0 && <Typography color="text.secondary">{t('students.noParentYet')}</Typography>}
       {student.guardians.map((g) => (
@@ -426,7 +454,7 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
           {g.relationship && <Tag label={t(`students.rel.${g.relationship}`)} />}
           {g.is_payer && <Tag tone="info" label={t('students.payer')} />}
           <WhatsAppButton phone={g.member?.user?.phone} text={t('wa.aboutChild', { name: g.member?.user?.full_name ?? '', child: student.first_name, school: ctx.school.name })} />
-          {g.member?.user && (
+          {canFamilies && g.member?.user && (
             <IconButton
               size="small"
               aria-label={`${t('contact.title')} — ${g.member.user.full_name}`}
@@ -435,9 +463,11 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
               <EditOutlined sx={{ fontSize: 16 }} />
             </IconButton>
           )}
-          <Button size="small" color="error" onClick={() => unlink.mutate(g.guardian_member_id)}>
-            {t('students.unlink')}
-          </Button>
+          {canFamilies && (
+            <Button size="small" color="error" onClick={() => unlink.mutate(g.guardian_member_id)}>
+              {t('students.unlink')}
+            </Button>
+          )}
         </Stack>
       ))}
 
@@ -458,7 +488,7 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
         <Typography variant="h5" sx={{ flex: 1 }}>
           {t('students.accessTitle')}
         </Typography>
-        {!student.member_id && (
+        {canFamilies && !student.member_id && (
           <Button size="small" variant="contained" onClick={() => setInviteStudent(true)}>
             {t('students.enableAccess')}
           </Button>
@@ -491,7 +521,7 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
         title={t('students.enableAccess')}
       />
 
-      {ctx.isAdmin && (
+      {ctx.can('students.delete') && (
         <>
           <Divider />
           <Box>
@@ -549,6 +579,7 @@ function ParentsTab({ onOpenStudent }: { onOpenStudent: (id: string) => void }) 
   const [search, setSearch] = useState('')
   const [contact, setContact] = useState<ContactTarget | null>(null)
   const [passwordFor, setPasswordFor] = useState<PasswordLinkTarget | null>(null)
+  const canFamilies = ctx.can('students.families')
   const toggle = useMutation({
     mutationFn: async (p: { id: string; status: string }) =>
       must(await supabase.from('school_members').update({ status: p.status === 'active' ? 'inactive' : 'active' }).eq('id', p.id)),
@@ -607,7 +638,7 @@ function ParentsTab({ onOpenStudent }: { onOpenStudent: (id: string) => void }) 
                         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
                           <span>{formatPhone(p.user?.phone) || '—'}</span>
                           <WhatsAppButton phone={p.user?.phone} text={t('wa.hello', { name: p.user?.full_name ?? '', school: ctx.school.name })} />
-                          {p.user && (
+                          {canFamilies && p.user && (
                             <IconButton
                               size="small"
                               aria-label={`${t('contact.title')} — ${p.user.full_name}`}
@@ -616,7 +647,7 @@ function ParentsTab({ onOpenStudent }: { onOpenStudent: (id: string) => void }) 
                               <EditOutlined sx={{ fontSize: 16 }} />
                             </IconButton>
                           )}
-                          {p.user && (
+                          {canFamilies && p.user && (
                             <Tooltip title={t('reset.linkAction')}>
                               <IconButton
                                 size="small"

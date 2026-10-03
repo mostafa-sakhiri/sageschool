@@ -23,7 +23,7 @@ function tempPassword() {
 
 // Creates (or reuses) a login and adds it to the school with a role.
 // Authorization happens here, before the secret key is used:
-//   admin -> any role ; staff -> parent or student only.
+//   admin -> any role ; students.families -> parent or student only.
 // There is no e-mail delivery locally: the temporary password is returned
 // for the office to hand over (DECISIONS.md D-008).
 export const inviteMember = createServerFn({ method: 'POST' })
@@ -57,8 +57,9 @@ export const inviteMember = createServerFn({ method: 'POST' })
       .eq('user_id', me?.id ?? '')
       .eq('status', 'active')
     const roles = (mine ?? []).map((m) => m.role)
-    const allowed =
-      roles.includes('admin') || (roles.includes('staff') && ['parent', 'student'].includes(data.role))
+    // Families: whoever may write students (secrétariat, or a role with that module)
+    const { data: canStudents } = await supabase.rpc('can_access', { p_school_id: data.schoolId, p_permission: 'students.families' })
+    const allowed = roles.includes('admin') || (!!canStudents && ['parent', 'student'].includes(data.role))
     if (!allowed) throw new Error('Droits insuffisants pour ajouter ce rôle')
 
     const admin = createServiceClient()
@@ -133,6 +134,7 @@ export const createPasswordLink = createServerFn({ method: 'POST' })
       .eq('user_id', me?.id ?? '')
       .eq('status', 'active')
     const roles = (mine ?? []).map((m) => m.role)
+    const { data: canStudents } = await supabase.rpc('can_access', { p_school_id: data.schoolId, p_permission: 'students.families' })
 
     const admin = createServiceClient()
     const { data: target } = await admin
@@ -153,7 +155,7 @@ export const createPasswordLink = createServerFn({ method: 'POST' })
     if (heldError || !held) throw new Error(heldError?.message ?? 'Membre introuvable')
     const manageable = (m: { role: string; school_id: string }) =>
       m.school_id === data.schoolId &&
-      (roles.includes('admin') || (roles.includes('staff') && ['parent', 'student'].includes(m.role)))
+      (roles.includes('admin') || (!!canStudents && ['parent', 'student'].includes(m.role)))
     if (!held.every(manageable)) throw new Error('Droits insuffisants pour ce membre')
 
     const authId = (target.user as unknown as { auth_provider_id: string | null } | null)?.auth_provider_id

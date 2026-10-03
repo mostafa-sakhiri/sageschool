@@ -27,7 +27,7 @@ import {
 } from '@mui/material'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, StatCard, Tag, fullName, initials, type Tone } from '#/components/ui'
-import { EmptyState, ErrorState, Loading, QueryState } from '#/components/states'
+import { EmptyState, ErrorState, Loading, QueryState, ReadOnly } from '#/components/states'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
@@ -60,11 +60,16 @@ const TONE: Record<Status, Tone> = { present: 'ok', absent: 'danger', late: 'war
 function AttendancePage() {
   const { t } = useI18n()
   const ctx = useSchool()
-  const { tab = 'students' } = Route.useSearch()
+  const search = Route.useSearch()
   const navigate = Route.useNavigate()
-  const alerts = useQuery({ ...alertsQuery(ctx.school.id), enabled: ctx.isOffice })
+  // The office view, tab by tab, follows the role's modules
+  const students = ctx.can('attendance.view_all')
+  const staff = ctx.can('staff_presence.view')
+  const tabs = [...(students ? ['students'] : []), ...(staff ? ['teachers'] : []), ...(students ? ['alerts'] : [])]
+  const tab = tabs.includes(search.tab ?? 'students') ? (search.tab ?? 'students') : tabs[0]
+  const alerts = useQuery({ ...alertsQuery(ctx.school.id), enabled: students })
   const openAlerts = (alerts.data ?? []).filter((a) => a.status === 'open').length
-  if (!ctx.isOffice)
+  if (!tabs.length)
     return <AppShell title={t('nav.attendance')}>{ctx.role === 'teacher' ? <RollCall /> : <FamilyAbsences />}</AppShell>
   // Office: students' roll call, teachers' arrivals and departures, alerts
   return (
@@ -77,9 +82,9 @@ function AttendancePage() {
         allowScrollButtonsMobile
         sx={{ mb: 2.5, borderBottom: `1px solid ${tokens.line}` }}
       >
-        <Tab value="students" label={t('att.tab.students')} />
-        <Tab value="teachers" label={t('att.tab.teachers')} />
-        <Tab
+        {students && <Tab value="students" label={t('att.tab.students')} />}
+        {staff && <Tab value="teachers" label={t('att.tab.teachers')} />}
+        {students && <Tab
           value="alerts"
           label={
             <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
@@ -87,11 +92,19 @@ function AttendancePage() {
               {openAlerts > 0 && <Tag tone="danger" label={openAlerts} />}
             </Stack>
           }
-        />
+        />}
       </Tabs>
       {tab === 'students' && <RollCall embedded />}
-      {tab === 'teachers' && <StaffPresencePanel />}
-      {tab === 'alerts' && <AlertsPanel />}
+      {tab === 'teachers' && (
+        <ReadOnly when={!ctx.can('staff_presence.record')}>
+          <StaffPresencePanel />
+        </ReadOnly>
+      )}
+      {tab === 'alerts' && (
+        <ReadOnly when={!ctx.can('attendance.alerts')}>
+          <AlertsPanel />
+        </ReadOnly>
+      )}
     </AppShell>
   )
 }
@@ -113,7 +126,21 @@ function RollCall({ embedded }: { embedded?: boolean }) {
   // Local changes not yet saved, by student
   const [edits, setEdits] = useState<Record<string, Status>>({})
   const [saved, setSaved] = useState(false)
-  const allStudents = useQuery({ ...studentsQuery(ctx.school.id), enabled: ctx.isOffice })
+  const office = ctx.can('attendance.view_all')
+  const allStudents = useQuery({ ...studentsQuery(ctx.school.id), enabled: office })
+  // A teacher whose role reads the whole school keeps the roll call of their
+  // own classes; the others are read only
+  const mine = useQuery({
+    queryKey: ['school', ctx.school.id, 'my-classes', ctx.member.id],
+    enabled: ctx.role === 'teacher' && office,
+    queryFn: async () => {
+      const [a, s] = await Promise.all([
+        supabase.from('teaching_assignments').select('class_id').eq('teacher_member_id', ctx.member.id),
+        supabase.from('timetable_slots').select('class_id').eq('teacher_member_id', ctx.member.id),
+      ])
+      return new Set([...must(a), ...must(s)].map((r) => r.class_id))
+    },
+  })
 
   useEffect(() => {
     if (!classId && classes.data?.length) setClassId(classes.data[0].id)
@@ -209,6 +236,8 @@ function RollCall({ embedded }: { embedded?: boolean }) {
   }, [roster.data, edits, savedMarks])
   const subjectName = (id: string | null) => subjects.data?.find((s) => s.id === id)?.name ?? '—'
 
+  const editable = ctx.can('attendance.take_all') || (ctx.can('attendance.take_own') && (!office || !!mine.data?.has(classId)))
+
   if (!ctx.year) return <EmptyState title={t('year.none')} />
   if (classes.isPending) return <Loading rows={5} />
   if (classes.isError) return <ErrorState error={classes.error} onRetry={() => classes.refetch()} />
@@ -221,18 +250,22 @@ function RollCall({ embedded }: { embedded?: boolean }) {
           <Typography color="text.secondary" sx={{ flex: 1 }}>
             {t('att.subtitle')}
           </Typography>
-          <Button variant={pending ? 'contained' : 'outlined'} onClick={() => save.mutate()} loading={save.isPending} disabled={!roster.data?.length}>
-            {t('att.save')}
-          </Button>
+          {editable && (
+            <Button variant={pending ? 'contained' : 'outlined'} onClick={() => save.mutate()} loading={save.isPending} disabled={!roster.data?.length}>
+              {t('att.save')}
+            </Button>
+          )}
         </Stack>
       ) : (
         <PageIntro
           title={t('att.title')}
           subtitle={t('att.subtitle')}
           actions={
-            <Button variant={pending ? 'contained' : 'outlined'} onClick={() => save.mutate()} loading={save.isPending} disabled={!roster.data?.length}>
-              {t('att.save')}
-            </Button>
+            editable && (
+              <Button variant={pending ? 'contained' : 'outlined'} onClick={() => save.mutate()} loading={save.isPending} disabled={!roster.data?.length}>
+                {t('att.save')}
+              </Button>
+            )
           }
         />
       )}
@@ -267,6 +300,7 @@ function RollCall({ embedded }: { embedded?: boolean }) {
           <StatCard key={k} value={counts[k]} label={t(`att.status.${k}`)} />
         ))}
       </Stack>
+      <ReadOnly when={!editable}>
       <QueryState
         query={roster}
         rows={6}
@@ -289,7 +323,7 @@ function RollCall({ embedded }: { embedded?: boolean }) {
                         </Stack>
                       </TableCell>
                       <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                        {ctx.isOffice && (() => {
+                        {ctx.can('attendance.take_all') && (() => {
                           // Only once saved, and not while flipped to another mark
                           const rec = existing.data?.find((r) => r.student_id === s.id && r.status === v && (r.status === 'absent' || r.status === 'late'))
                           return rec ? (
@@ -327,7 +361,8 @@ function RollCall({ embedded }: { embedded?: boolean }) {
           </Paper>
         )}
       </QueryState>
-      {pending && !!roster.data?.length && (
+      </ReadOnly>
+      {editable && pending && !!roster.data?.length && (
         <Paper
           elevation={6}
           role="status"
@@ -346,7 +381,7 @@ function RollCall({ embedded }: { embedded?: boolean }) {
           </Button>
         </Paper>
       )}
-      {ctx.isOffice && <SchoolAbsencesOfDay date={date} />}
+      {office && <SchoolAbsencesOfDay date={date} />}
     </>
   )
 }

@@ -6,6 +6,7 @@ import HowToRegOutlined from '@mui/icons-material/HowToRegOutlined'
 import { fullName } from '#/components/ui'
 import { SurfaceActions, SurfaceContent, SurfaceDialog, SurfaceTitle } from '#/components/Surface'
 import { WhatsAppButton } from '#/components/WhatsApp'
+import { ReadOnly } from '#/components/states'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
@@ -82,6 +83,8 @@ export function AppointmentDialog({
   const [notes, setNotes] = useState(initial.notes ?? '')
   const [status, setStatus] = useState<Status>(initial.status ?? 'planned')
   const isEdit = !!initial.id
+  // Read-only access to the agenda: the dialog shows the appointment, nothing to change
+  const canWrite = ctx.can('agenda.manage')
 
   // A student picked: the visitor defaults to their first parent
   const pickStudent = (id: string | null) => {
@@ -140,11 +143,12 @@ export function AppointmentDialog({
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          save.mutate()
+          if (canWrite) save.mutate()
         }}
       >
-        <SurfaceTitle>{isEdit ? t('agenda.edit') : t('agenda.new')}</SurfaceTitle>
+        <SurfaceTitle>{!canWrite ? title || t(`agenda.kind.${kind}`) : isEdit ? t('agenda.edit') : t('agenda.new')}</SurfaceTitle>
         <SurfaceContent>
+          <ReadOnly when={!canWrite}>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField select label={t('agenda.kindLabel')} value={kind} onChange={(e) => setKind(e.target.value as Kind)} sx={{ minWidth: 200 }}>
@@ -216,14 +220,15 @@ export function AppointmentDialog({
             {invalidTime && <Alert severity="warning">{t('agenda.badTime')}</Alert>}
             {(save.isError || remove.isError) && <Alert severity="error">{errorMessage(save.error ?? remove.error, t)}</Alert>}
           </Stack>
+          </ReadOnly>
         </SurfaceContent>
         <SurfaceActions>
-          {isEdit && (
+          {canWrite && isEdit && (
             <Button color="error" onClick={() => remove.mutate()} loading={remove.isPending} sx={{ mr: 'auto' }}>
               {t('common.delete')}
             </Button>
           )}
-          {isEdit && kind === 'visit_prospect' && !initial.preinscription_id && (
+          {canWrite && ctx.can('preregistrations.manage') && isEdit && kind === 'visit_prospect' && !initial.preinscription_id && (
             <Button
               startIcon={<HowToRegOutlined />}
               onClick={() => navigate({ to: '/preregistrations', search: { new: true, parent: visitor || undefined, phone: phone || undefined, appointment: initial.id } })}
@@ -231,10 +236,12 @@ export function AppointmentDialog({
               {t('agenda.toPrereg')}
             </Button>
           )}
-          <Button onClick={onClose}>{t('common.cancel')}</Button>
-          <Button type="submit" variant="contained" loading={save.isPending} disabled={invalidTime || !date}>
-            {t('common.save')}
-          </Button>
+          <Button onClick={onClose}>{canWrite ? t('common.cancel') : t('common.close')}</Button>
+          {canWrite && (
+            <Button type="submit" variant="contained" loading={save.isPending} disabled={invalidTime || !date}>
+              {t('common.save')}
+            </Button>
+          )}
         </SurfaceActions>
       </form>
     </SurfaceDialog>

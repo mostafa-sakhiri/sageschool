@@ -14,6 +14,7 @@ export type Announcement = {
   status: 'draft' | 'published'
   published_at: string | null
   created_at: string
+  author_member_id: string
   targets: { class_id: string | null; node_id: string | null }[]
 }
 
@@ -24,7 +25,7 @@ export const announcementsQuery = (schoolId: string) =>
       must(
         await supabase
           .from('announcements')
-          .select('id, title, body, priority, status, published_at, created_at, targets:announcement_targets(class_id, node_id)')
+          .select('id, title, body, priority, status, published_at, created_at, author_member_id, targets:announcement_targets(class_id, node_id)')
           .eq('school_id', schoolId)
           .order('created_at', { ascending: false }),
       ) as unknown as Announcement[],

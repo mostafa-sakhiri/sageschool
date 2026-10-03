@@ -14,10 +14,10 @@ export function GlobalTools() {
   const ctx = useSchool()
   return (
     <>
-      <EnrollTool />
-      <PreregTool />
-      <AppointmentTool />
-      <AnnouncementTool />
+      {ctx.can('students.create') && <EnrollTool />}
+      {ctx.can('preregistrations.manage') && <PreregTool />}
+      {ctx.can('agenda.manage') && <AppointmentTool />}
+      {ctx.can('announcements.create') && <AnnouncementTool />}
       {ctx.isAdmin && <InviteTool />}
       <FindStudentsTool />
       <OpenPageTool />

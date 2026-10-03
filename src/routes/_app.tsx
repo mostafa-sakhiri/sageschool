@@ -4,11 +4,11 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchClaims } from '#/lib/auth'
 import {
   SchoolContext,
+  permissionsQuery,
   resolveActive,
   resolveYear,
   schoolYearsQuery,
   sessionQuery,
-  staffFeesAccess,
   useSelectionVersion,
   type SchoolCtx,
 } from '#/lib/session'
@@ -49,6 +49,10 @@ function AppLayout() {
     ...schoolYearsQuery(active?.school?.id ?? ''),
     enabled: !!active?.school,
   })
+  const access = useQuery({
+    ...permissionsQuery(claims.sub, active?.member?.id ?? ''),
+    enabled: !!active?.member,
+  })
   const year = useMemo(
     () => (active?.school && years.data ? resolveYear(active.school.id, years.data) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- selection: localStorage changed
@@ -70,7 +74,8 @@ function AppLayout() {
     if (pathname !== '/setup') return <Navigate to="/setup" />
     return <Outlet />
   }
-  if (years.isPending && active.school) return <FullPageLoading />
+  if ((years.isPending || access.isPending) && active.school) return <FullPageLoading />
+  if (access.isError) return <ErrorState error={access.error} onRetry={() => access.refetch()} />
 
   const ctx: SchoolCtx = {
     sub: claims.sub,
@@ -84,7 +89,9 @@ function AppLayout() {
     years: years.data ?? [],
     isOffice: active.member!.role === 'admin' || active.member!.role === 'staff',
     isAdmin: active.member!.role === 'admin',
-    canFees: active.member!.role === 'admin' || (active.member!.role === 'staff' && staffFeesAccess(active.school.settings)),
+    permissions: access.data!,
+    can: (p) => access.data!.includes(p),
+    canFees: access.data!.includes('fees.view'),
   }
   return (
     <SchoolContext.Provider value={ctx}>

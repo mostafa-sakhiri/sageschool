@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Box, Link as MuiLink, Paper, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import CakeOutlined from '@mui/icons-material/CakeOutlined'
 import { AppShell } from '#/components/AppShell'
-import { PageIntro, StatCard, fullName } from '#/components/ui'
-import { EmptyState, ErrorState, Loading } from '#/components/states'
+import { PageIntro, StatCard, Tag, fullName } from '#/components/ui'
+import { EmptyState, ErrorState, Loading, NotFound } from '#/components/states'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
@@ -23,16 +23,16 @@ function EventsPage() {
   const { t } = useI18n()
   const ctx = useSchool()
   const students = useQuery(studentsQuery(ctx.school.id))
-  const plans = useQuery({ ...birthdayPlansQuery(ctx.school.id), enabled: ctx.isOffice })
+  const plans = useQuery({ ...birthdayPlansQuery(ctx.school.id), enabled: ctx.can('events.birthdays') })
   const [range, setRange] = useState<Range>('twoWeeks')
   const today = todayIso()
   const [from, to] =
     range === 'twoWeeks' ? twoWeeks(today) : range === 'month' ? [today, addDays(today, 30)] : range === 'year' ? [today, addDays(today, 364)] : [addDays(today, -30), addDays(today, -1)]
 
-  if (!ctx.isOffice)
+  if (!ctx.can('events.birthdays'))
     return (
       <AppShell title={t('nav.events')}>
-        <EmptyState title={t('events.noAccess')} />
+        <NotFound />
       </AppShell>
     )
 
@@ -133,6 +133,9 @@ function BirthdayRow({ b, today }: { b: Birthday; today: string }) {
         ))}
       </Stack>
       <Stack spacing={0.5} sx={{ alignItems: { md: 'flex-end' } }}>
+        {!ctx.can('events.manage') ? (
+          <Tag tone={status === 'organized' ? 'ok' : status === 'to_organize' ? 'warn' : 'neutral'} label={t(`events.st.${status}`)} />
+        ) : (
         <ToggleButtonGroup
           exclusive
           size="small"
@@ -146,6 +149,7 @@ function BirthdayRow({ b, today }: { b: Birthday; today: string }) {
             </ToggleButton>
           ))}
         </ToggleButtonGroup>
+        )}
         {save.isError && <Alert severity="error">{errorMessage(save.error, t)}</Alert>}
       </Stack>
     </Paper>

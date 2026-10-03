@@ -26,7 +26,7 @@ import {
 import EditOutlined from '@mui/icons-material/EditOutlined'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, Tag, fullName } from '#/components/ui'
-import { EmptyState, Loading, QueryState } from '#/components/states'
+import { EmptyState, Loading, NotFound, QueryState } from '#/components/states'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
@@ -49,6 +49,10 @@ export const Route = createFileRoute('/_app/cases')({
 function CasesPage() {
   const { t, locale } = useI18n()
   const ctx = useSchool()
+  // The school's view of every case with messages read (a parent keeps the
+  // parent view); writing, resolving and recording a complaint need write
+  const office = ctx.role !== 'parent' && ctx.can('messages.view')
+  const canWrite = office && ctx.can('messages.reply')
   const cases = useQuery(casesQuery(ctx.school.id))
   const [selected, setSelected] = useState<string | null>(null)
   const [filter, setFilter] = useState<'active' | 'admin' | 'resolved'>('active')
@@ -66,22 +70,29 @@ function CasesPage() {
   )
   const current = (cases.data ?? []).find((c) => c.id === selected) ?? rows[0]
 
+  if (!office && ctx.role !== 'parent')
+    return (
+      <AppShell title={t('nav.cases')}>
+        <NotFound />
+      </AppShell>
+    )
+
   return (
     <AppShell title={t('nav.cases')}>
       <PageIntro
-        title={ctx.isOffice ? t('cases.titleOffice') : t('cases.titleParent')}
-        subtitle={ctx.isOffice ? t('cases.subtitleOffice') : t('cases.subtitleParent')}
+        title={office ? t('cases.titleOffice') : t('cases.titleParent')}
+        subtitle={office ? t('cases.subtitleOffice') : t('cases.subtitleParent')}
         actions={
-          (ctx.role === 'parent' || ctx.isOffice) && (
+          (ctx.role === 'parent' || canWrite) && (
             <Button variant="contained" startIcon={<EditOutlined />} onClick={() => setComposing(true)}>
-              {ctx.isOffice ? t('cases.newComplaint') : t('cases.new')}
+              {office ? t('cases.newComplaint') : t('cases.new')}
             </Button>
           )
         }
       />
       <ToggleButtonGroup exclusive size="small" value={filter} onChange={(_, v) => v && setFilter(v)} sx={{ mb: 2 }}>
         <ToggleButton value="active">{t('cases.active')}</ToggleButton>
-        {ctx.isOffice && (
+        {office && (
           <ToggleButton value="admin">
             {t('cases.forAdmin')} ({(cases.data ?? []).filter((c) => c.for_admin && c.status !== 'resolved').length})
           </ToggleButton>
@@ -104,23 +115,23 @@ function CasesPage() {
                   <ListItemButton key={c.id} selected={c.id === current?.id} onClick={() => setSelected(c.id)} sx={{ borderRadius: 2, alignItems: 'flex-start' }}>
                     <ListItemText
                       primary={c.subject}
-                      secondary={`${ctx.isOffice ? `${c.parent?.user?.full_name ?? ''} · ` : ''}${formatDateTime(c.updated_at, locale)}`}
+                      secondary={`${office ? `${c.parent?.user?.full_name ?? ''} · ` : ''}${formatDateTime(c.updated_at, locale)}`}
                       slotProps={{ primary: { sx: { fontWeight: 600, fontSize: 14 } } }}
                     />
                     <Stack spacing={0.5} sx={{ alignItems: 'flex-end', mt: 0.5 }}>
                       <Tag tone={CASE_TONE[c.status]} label={t(`cases.status.${c.status}`)} />
-                      {ctx.isOffice && c.for_admin && <Tag tone="info" label={t('cases.forAdminShort')} />}
+                      {office && c.for_admin && <Tag tone="info" label={t('cases.forAdminShort')} />}
                     </Stack>
                   </ListItemButton>
                 ))}
               </List>
             </Paper>
-            {current ? <Thread key={current.id} c={current} /> : <EmptyState title={t('cases.pick')} />}
+            {current ? <Thread key={current.id} c={current} office={office} canWrite={canWrite} /> : <EmptyState title={t('cases.pick')} />}
           </Box>
         )}
       </QueryState>
       {composing &&
-        (ctx.isOffice ? (
+        (canWrite ? (
           <NewComplaint onClose={() => setComposing(false)} onCreated={setSelected} />
         ) : (
           <NewCase onClose={() => setComposing(false)} onCreated={setSelected} />
@@ -129,7 +140,7 @@ function CasesPage() {
   )
 }
 
-function Thread({ c }: { c: CaseRow }) {
+function Thread({ c, office, canWrite }: { c: CaseRow; office: boolean; canWrite: boolean }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
@@ -184,7 +195,7 @@ function Thread({ c }: { c: CaseRow }) {
           {c.subject}
         </Typography>
         <Tag tone={CASE_TONE[c.status]} label={t(`cases.status.${c.status}`)} />
-        {ctx.isOffice &&
+        {canWrite &&
           (c.status === 'resolved' ? (
             <Button size="small" onClick={() => resolve.mutate(true)} loading={resolve.isPending}>
               {t('cases.reopen')}
@@ -199,14 +210,15 @@ function Thread({ c }: { c: CaseRow }) {
         {c.parent?.user?.full_name}
         {c.student ? ` · ${fullName(c.student)}` : ''}
         {c.channel !== 'app' ? ` · ${t(`cases.channel.${c.channel}`)}` : ''}
-        {ctx.isOffice && c.for_admin ? ` · ${t('cases.forAdmin')}` : ''}
+        {office && c.for_admin ? ` · ${t('cases.forAdmin')}` : ''}
       </Typography>
       <Stack spacing={1.25} sx={{ flex: 1, mb: 2 }}>
         {messages.isPending && <Loading rows={2} />}
         {(messages.data ?? []).map((m, i) => {
           // A complaint entered by the office: its first message is the parent's words
           const onBehalf = i === 0 && c.direction === 'parent_to_school' && c.channel !== 'app'
-          const fromSchool = !onBehalf && (m.author?.role === 'admin' || m.author?.role === 'staff')
+          // The school = anyone but the case's parent (same rule as the database)
+          const fromSchool = !onBehalf && m.author_member_id !== c.parent_member_id
           const mine = m.author_member_id === ctx.member.id
           return (
             <Box
@@ -233,7 +245,7 @@ function Thread({ c }: { c: CaseRow }) {
       </Stack>
       {c.status === 'resolved' ? (
         <Alert severity="success">{t('cases.closed')}</Alert>
-      ) : (
+      ) : office && !canWrite ? null : (
         <Stack
           component="form"
           spacing={1}
@@ -243,18 +255,18 @@ function Thread({ c }: { c: CaseRow }) {
           }}
         >
           <TextField
-            label={ctx.isOffice ? t('cases.replyAsSchool') : t('cases.reply')}
+            label={office ? t('cases.replyAsSchool') : t('cases.reply')}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             multiline
             minRows={2}
           />
-          {ctx.isOffice && <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted }}>{t('cases.whatsappStub')}</Typography>}
+          {office && <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted }}>{t('cases.whatsappStub')}</Typography>}
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Button type="submit" variant="contained" loading={reply.isPending} disabled={!body.trim()}>
               {t('cases.send')}
             </Button>
-            {ctx.isOffice && body.trim() && (
+            {office && body.trim() && (
               <WhatsAppButton
                 phone={c.parent?.user?.phone}
                 label={t('wa.sendAlso')}

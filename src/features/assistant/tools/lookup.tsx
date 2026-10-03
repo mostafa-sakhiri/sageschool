@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { Box, Stack, Typography } from '@mui/material'
 import { useFrontendTool } from '@copilotkit/react-core/v2'
-import { useSchool } from '#/lib/session'
+import { useSchool, type Permission } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { fullName } from '#/components/ui'
 import { formatDate } from '#/lib/format'
@@ -96,6 +96,17 @@ const PAGES = {
   settings: '/setup',
 } as const
 type Page = keyof typeof PAGES
+// What the role must hold to open a page (the assistant is the office's)
+const PAGE_PERMISSION: Partial<Record<Page, Permission>> = {
+  students: 'students.view',
+  classes: 'classes.view_all',
+  preregistrations: 'preregistrations.view',
+  agenda: 'agenda.view',
+  attendance: 'attendance.view_all',
+  announcements: 'announcements.view_all',
+  fees: 'fees.view',
+  cases: 'messages.view',
+}
 
 const openParams = z.object({
   page: z.enum(Object.keys(PAGES) as [Page, ...Page[]]),
@@ -116,7 +127,8 @@ export function OpenPageTool() {
       parameters: openParams,
       handler: async ({ page, className, edit }) => {
         if ((page === 'team' || page === 'settings') && !ctx.isAdmin) return JSON.stringify({ opened: false, reason: 'admin only' })
-        if (page === 'fees' && !ctx.canFees) return JSON.stringify({ opened: false, reason: 'no access to fees' })
+        const needed = PAGE_PERMISSION[page]
+        if (needed && !ctx.can(needed)) return JSON.stringify({ opened: false, reason: `no access to ${page}` })
         if (page === 'timetable') {
           const classes = ctx.year ? await queryClient.fetchQuery(classesQuery(ctx.school.id, ctx.year.id)) : []
           const cls = matchOne(classes, (c) => c.name, className)
@@ -132,7 +144,7 @@ export function OpenPageTool() {
           <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted }}>↗ {t('assistant.pageOpened')}</Typography>
         ) : null,
     },
-    [ctx.school.id, ctx.year?.id, ctx.isAdmin, ctx.canFees, t],
+    [ctx.school.id, ctx.year?.id, ctx.isAdmin, ctx.can, t],
   )
   return null
 }

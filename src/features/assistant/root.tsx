@@ -100,6 +100,8 @@ function SchoolContextForAgent() {
       role: t(`role.${ctx.role}`),
       canManageTeam: ctx.isAdmin,
       canSeeFees: ctx.canFees,
+      // What the role may do: only offer that
+      permissions: ctx.permissions,
       school: ctx.school.name,
       schoolYear: ctx.year?.name ?? null,
       page: pathname,

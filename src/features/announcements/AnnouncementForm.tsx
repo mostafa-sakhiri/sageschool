@@ -151,9 +151,11 @@ export function AnnouncementForm({
             <Button onClick={() => save.mutate(false)} disabled={!title || !body || !targetsOk} loading={save.isPending && save.variables === false}>
               {t('ann.saveDraft')}
             </Button>
-            <Button variant="contained" onClick={() => save.mutate(true)} disabled={!title || !body || !targetsOk} loading={save.isPending && save.variables === true}>
-              {t('ann.publish')}
-            </Button>
+            {ctx.can('announcements.publish') && (
+              <Button variant="contained" onClick={() => save.mutate(true)} disabled={!title || !body || !targetsOk} loading={save.isPending && save.variables === true}>
+                {t('ann.publish')}
+              </Button>
+            )}
           </>
         )}
       </SurfaceActions>

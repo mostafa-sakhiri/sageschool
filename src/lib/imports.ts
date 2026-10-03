@@ -75,8 +75,8 @@ export const importMembers = createServerFn({ method: 'POST' })
       .eq('status', 'active')
     const roles = (mine ?? []).map((m) => m.role)
     const isAdmin = roles.includes('admin')
-    const isOffice = isAdmin || roles.includes('staff')
-    if (data.kind === 'students' ? !isOffice : !isAdmin) throw new Error('Droits insuffisants pour cet import')
+    const { data: canStudents } = await db.rpc('can_access', { p_school_id: data.schoolId, p_permission: 'students.create' })
+    if (data.kind === 'students' ? !canStudents : !isAdmin) throw new Error('Droits insuffisants pour cet import')
 
     const admin = createServiceClient()
     const credentials: Credential[] = []

@@ -31,7 +31,7 @@ import EventOutlined from '@mui/icons-material/EventOutlined'
 import HowToRegOutlined from '@mui/icons-material/HowToRegOutlined'
 import { AppShell } from '#/components/AppShell'
 import { PageIntro, StatCard, Tag } from '#/components/ui'
-import { EmptyState, QueryState } from '#/components/states'
+import { EmptyState, NotFound, QueryState } from '#/components/states'
 import { useSchool } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { supabase } from '#/lib/supabase/client'
@@ -68,11 +68,15 @@ function PreregistrationsPage() {
   const search = Route.useSearch()
   const navigateSelf = Route.useNavigate()
   const navigate = useNavigate()
+  const canWrite = ctx.can('preregistrations.manage')
+  // Converting creates the student; planning a visit creates an appointment
+  const canEnroll = canWrite && ctx.can('students.create')
+  const canPlanVisit = canWrite && ctx.can('agenda.manage')
   useEffect(() => {
     if (!search.new) return
-    setEditing({ parent_name: search.parent, parent_phone: search.phone, source: search.appointment ? t('prereg.fromVisit') : undefined, appointmentId: search.appointment })
+    if (canWrite) setEditing({ parent_name: search.parent, parent_phone: search.phone, source: search.appointment ? t('prereg.fromVisit') : undefined, appointmentId: search.appointment })
     navigateSelf({ search: {}, replace: true })
-  }, [search.new, search.parent, search.phone, search.appointment, navigateSelf, t])
+  }, [search.new, search.parent, search.phone, search.appointment, navigateSelf, t, canWrite])
 
   const all = list.data ?? []
   const rows = all.filter((p) =>
@@ -91,15 +95,24 @@ function PreregistrationsPage() {
     [enrolling],
   )
 
+  if (!ctx.can('preregistrations.view'))
+    return (
+      <AppShell title={t('nav.preregistrations')}>
+        <NotFound />
+      </AppShell>
+    )
+
   return (
     <AppShell title={t('nav.preregistrations')}>
       <PageIntro
         title={t('prereg.title')}
         subtitle={t('prereg.subtitle')}
         actions={
-          <Button variant="contained" startIcon={<AddOutlined />} onClick={() => setEditing({})}>
-            {t('prereg.new')}
-          </Button>
+          canWrite && (
+            <Button variant="contained" startIcon={<AddOutlined />} onClick={() => setEditing({})}>
+              {t('prereg.new')}
+            </Button>
+          )
         }
       />
       <Stack direction="row" spacing={1.25} useFlexGap sx={{ flexWrap: 'wrap', mb: 2.5 }}>
@@ -125,9 +138,11 @@ function PreregistrationsPage() {
               title={t('prereg.empty')}
               hint={t('prereg.emptyHint')}
               action={
-                <Button variant="contained" onClick={() => setEditing({})}>
-                  {t('prereg.new')}
-                </Button>
+                canWrite && (
+                  <Button variant="contained" onClick={() => setEditing({})}>
+                    {t('prereg.new')}
+                  </Button>
+                )
               }
             />
           ) : null
@@ -198,31 +213,39 @@ function PreregistrationsPage() {
                         <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                           {ACTIVE.includes(p.status) && (
                             <>
-                              <Button size="small" variant={isDue ? 'contained' : 'outlined'} startIcon={<PhoneForwardedOutlined />} onClick={() => setFollowing(p)} sx={{ mr: 0.5 }}>
-                                {t('prereg.followup')}
-                              </Button>
-                              <Tooltip title={t('prereg.planVisit')}>
-                                <IconButton size="small" aria-label={t('prereg.planVisit')} onClick={() => navigate({ to: '/agenda', search: { preinscription: p.id } })}>
-                                  <EventOutlined fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title={t('prereg.enroll')}>
-                                <IconButton size="small" aria-label={t('prereg.enroll')} onClick={() => setEnrolling(p)}>
-                                  <HowToRegOutlined fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
+                              {canWrite && (
+                                <Button size="small" variant={isDue ? 'contained' : 'outlined'} startIcon={<PhoneForwardedOutlined />} onClick={() => setFollowing(p)} sx={{ mr: 0.5 }}>
+                                  {t('prereg.followup')}
+                                </Button>
+                              )}
+                              {canPlanVisit && (
+                                <Tooltip title={t('prereg.planVisit')}>
+                                  <IconButton size="small" aria-label={t('prereg.planVisit')} onClick={() => navigate({ to: '/agenda', search: { preinscription: p.id } })}>
+                                    <EventOutlined fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                              {canEnroll && (
+                                <Tooltip title={t('prereg.enroll')}>
+                                  <IconButton size="small" aria-label={t('prereg.enroll')} onClick={() => setEnrolling(p)}>
+                                    <HowToRegOutlined fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
                             </>
                           )}
-                          {p.student_id && (
+                          {p.student_id && ctx.can('students.view') && (
                             <Button component={Link} to="/students" size="small">
                               {t('prereg.seeStudent')}
                             </Button>
                           )}
-                          <Tooltip title={t('common.edit')}>
-                            <IconButton size="small" aria-label={t('common.edit')} onClick={() => setEditing(p)}>
-                              <EditOutlined fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
+                          {canWrite && (
+                            <Tooltip title={t('common.edit')}>
+                              <IconButton size="small" aria-label={t('common.edit')} onClick={() => setEditing(p)}>
+                                <EditOutlined fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                         </TableCell>
                       </TableRow>
                     )
@@ -233,9 +256,9 @@ function PreregistrationsPage() {
           )
         }
       </QueryState>
-      {editing && <PreregDialog initial={editing} onClose={() => setEditing(null)} />}
-      {following && <FollowupDialog p={following} onClose={() => setFollowing(null)} />}
-      <AddStudentDialog open={!!enrolling} onClose={() => setEnrolling(null)} onCreated={() => setEnrolling(null)} prefill={prefill} />
+      {canWrite && editing && <PreregDialog initial={editing} onClose={() => setEditing(null)} />}
+      {canWrite && following && <FollowupDialog p={following} onClose={() => setFollowing(null)} />}
+      {canEnroll && <AddStudentDialog open={!!enrolling} onClose={() => setEnrolling(null)} onCreated={() => setEnrolling(null)} prefill={prefill} />}
     </AppShell>
   )
 }

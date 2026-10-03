@@ -53,12 +53,18 @@ type AnnTab = (typeof TABS)[number]
 function AnnouncementsPage() {
   const { t, locale } = useI18n()
   const ctx = useSchool()
+  // The office view follows the permissions, not the base role: a teacher
+  // allowed to see every announcement gets the office list
+  const office = ctx.can('announcements.view_all') || ctx.can('announcements.create')
+  const canWrite = ctx.can('announcements.create')
+  const canPublish = ctx.can('announcements.publish')
+  const canEdit = useCanEditAnnouncement()
   const list = useQuery(announcementsQuery(ctx.school.id))
   const nodes = useQuery(nodesQuery(ctx.school.id))
-  const classes = useQuery({ ...classesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year && ctx.isOffice })
+  const classes = useQuery({ ...classesQuery(ctx.school.id, ctx.year?.id ?? ''), enabled: !!ctx.year && office })
   const reach = useQuery({
     queryKey: ['school', ctx.school.id, 'outbox-reach'],
-    enabled: ctx.isOffice,
+    enabled: office,
     queryFn: async () => {
       const rows = must(
         await supabase.from('notification_outbox').select('ref_id, status').eq('school_id', ctx.school.id).eq('kind', 'announcement'),
@@ -84,9 +90,9 @@ function AnnouncementsPage() {
   const navigateSelf = Route.useNavigate()
   useEffect(() => {
     if (!openNew) return
-    setForm('new')
+    if (canWrite) setForm('new')
     navigateSelf({ search: {}, replace: true })
-  }, [openNew, navigateSelf])
+  }, [openNew, navigateSelf, canWrite])
 
   const targetLabel = (a: Announcement) => {
     if (!a.targets.length) return [t('ann.wholeSchool')]
@@ -118,16 +124,16 @@ function AnnouncementsPage() {
     <AppShell title={t('nav.announcements')}>
       <PageIntro
         title={t('ann.title')}
-        subtitle={ctx.isOffice ? t('ann.subtitleOffice') : t('ann.subtitleReader')}
+        subtitle={office ? t('ann.subtitleOffice') : t('ann.subtitleReader')}
         actions={
-          ctx.isOffice && (
+          canWrite && (
             <Button variant="contained" startIcon={<CampaignOutlined />} onClick={() => setForm('new')}>
               {t('ann.new')}
             </Button>
           )
         }
       />
-      {ctx.isOffice && (list.data ?? []).length > 0 && (
+      {office && (list.data ?? []).length > 0 && (
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, borderBottom: `1px solid ${tokens.line}` }}>
           {TABS.map((k) => (
             <Tab
@@ -146,10 +152,10 @@ function AnnouncementsPage() {
       <QueryState
         query={list}
         rows={4}
-        empty={(d) => (d.length === 0 ? <EmptyState title={t('ann.empty')} hint={ctx.isOffice ? t('ann.emptyHint') : undefined} /> : null)}
+        empty={(d) => (d.length === 0 ? <EmptyState title={t('ann.empty')} hint={canWrite ? t('ann.emptyHint') : undefined} /> : null)}
       >
         {(all) => {
-          const rows = ctx.isOffice ? all.filter((a) => tabOf(a) === tab) : all
+          const rows = office ? all.filter((a) => tabOf(a) === tab) : all
           if (rows.length === 0) return <EmptyState title={t(`ann.tabEmpty.${tab}`)} />
           return (
           <Stack spacing={1.5}>
@@ -185,7 +191,7 @@ function AnnouncementsPage() {
                   {a.priority !== 'normal' && <Tag tone={a.priority === 'urgent' ? 'danger' : 'warn'} label={t(`ann.priority.${a.priority}`)} />}
                   {a.status === 'draft' && <Tag label={t('ann.draft')} />}
                   <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted }}>{formatDateTime(a.published_at ?? a.created_at, locale)}</Typography>
-                  {ctx.isOffice && (
+                  {canEdit(a) && (
                     <Stack direction="row" className="ann-actions" sx={{ opacity: { xs: 1, md: 0.55 }, transition: 'opacity 120ms' }}>
                       <Tooltip title={t('common.edit')}>
                         <IconButton
@@ -229,7 +235,7 @@ function AnnouncementsPage() {
                 >
                   {a.body}
                 </Typography>
-                {ctx.isOffice && (
+                {office && (
                   <Stack direction="row" spacing={1} useFlexGap sx={{ mt: 1.25, flexWrap: 'wrap', alignItems: 'center' }}>
                     {targetLabel(a).map((l, i) => (
                       <Chip key={i} size="small" label={l} variant="outlined" />
@@ -237,6 +243,12 @@ function AnnouncementsPage() {
                     {a.status === 'published' && (
                       <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted }}>{t('ann.reached', { n: reach.data?.[a.id]?.total ?? 0 })}</Typography>
                     )}
+                    {a.status === 'published' && !canPublish && reach.data?.[a.id] && (
+                      <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted, marginInlineStart: 'auto' }}>
+                        {t('ann.whatsappProgress', { sent: reach.data[a.id].sent, total: reach.data[a.id].total })}
+                      </Typography>
+                    )}
+                    {canPublish && (
                     <Box sx={{ marginInlineStart: 'auto' }} onClick={(e) => e.stopPropagation()}>
                       {a.status === 'published' ? (
                         <Button size="small" variant="outlined" startIcon={<WhatsAppIcon sx={{ color: '#25D366' }} />} onClick={() => setBroadcastId(a.id)}>
@@ -246,6 +258,7 @@ function AnnouncementsPage() {
                         <PublishButton id={a.id} onPublished={setBroadcastId} />
                       )}
                     </Box>
+                    )}
                   </Stack>
                 )}
               </Paper>
@@ -275,15 +288,15 @@ function AnnouncementsPage() {
           }}
         />
       )}
-      {form && (
+      {form && (form === 'new' ? canWrite : canEdit(form)) && (
         <AnnouncementForm
           initial={form === 'new' ? null : form}
           onClose={() => setForm(null)}
           onPublished={setBroadcastId}
         />
       )}
-      {deleting && <DeleteDialog a={deleting} sent={reach.data?.[deleting.id]?.sent ?? 0} onClose={() => setDeleting(null)} />}
-      {broadcast && (
+      {deleting && canEdit(deleting) && <DeleteDialog a={deleting} sent={reach.data?.[deleting.id]?.sent ?? 0} onClose={() => setDeleting(null)} />}
+      {broadcast && canPublish && (
         <WhatsAppBroadcast
           announcement={broadcast}
           onClose={() => {
@@ -296,7 +309,8 @@ function AnnouncementsPage() {
   )
 }
 
-// The whole announcement, for everyone; the office also gets its actions.
+// The whole announcement, for everyone; readers of the module also see the
+// audience, writers get its actions.
 function AnnouncementDetail({
   a,
   targets,
@@ -316,6 +330,7 @@ function AnnouncementDetail({
 }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
+  const canEdit = useCanEditAnnouncement()
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
@@ -337,7 +352,7 @@ function AnnouncementDetail({
         <Typography dir="auto" sx={{ whiteSpace: 'pre-wrap', fontSize: 15, lineHeight: 1.6 }}>
           {a.body}
         </Typography>
-        {ctx.isOffice && (
+        {(ctx.can('announcements.view_all') || ctx.can('announcements.create')) && (
           <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px solid ${tokens.lineSoft}` }}>
             <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted, mb: 0.75 }}>{t('ann.audience')}</Typography>
             <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
@@ -351,15 +366,19 @@ function AnnouncementDetail({
           </Box>
         )}
       </DialogContent>
-      {ctx.isOffice && (
+      {(canEdit(a) || ctx.can('announcements.publish')) && (
         <DialogActions>
-          <Button color="error" startIcon={<DeleteOutlineOutlined />} onClick={onDelete} sx={{ mr: 'auto' }}>
-            {t('common.delete')}
-          </Button>
-          <Button startIcon={<EditOutlined />} onClick={onEdit}>
-            {t('common.edit')}
-          </Button>
-          {a.status === 'published' ? (
+          {canEdit(a) && (
+            <>
+              <Button color="error" startIcon={<DeleteOutlineOutlined />} onClick={onDelete} sx={{ mr: 'auto' }}>
+                {t('common.delete')}
+              </Button>
+              <Button startIcon={<EditOutlined />} onClick={onEdit}>
+                {t('common.edit')}
+              </Button>
+            </>
+          )}
+          {!ctx.can('announcements.publish') ? null : a.status === 'published' ? (
             <Button variant="contained" startIcon={<WhatsAppIcon />} onClick={onBroadcast}>
               {t('ann.sendWhatsApp')}
             </Button>
@@ -434,3 +453,11 @@ function PublishButton({ id, onPublished }: { id: string; onPublished: (id: stri
   )
 }
 
+
+// A draft by its author (announcements.create), any announcement with
+// announcements.edit_all — the rule private.can_edit_announcement enforces
+function useCanEditAnnouncement() {
+  const ctx = useSchool()
+  return (a: Announcement) =>
+    ctx.can('announcements.edit_all') || (ctx.can('announcements.create') && a.status === 'draft' && a.author_member_id === ctx.member.id)
+}

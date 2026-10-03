@@ -45,8 +45,14 @@ import LightModeOutlined from '@mui/icons-material/LightModeOutlined'
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined'
 import ChevronLeftOutlined from '@mui/icons-material/ChevronLeftOutlined'
 import ChevronRightOutlined from '@mui/icons-material/ChevronRightOutlined'
+import ArrowBackOutlined from '@mui/icons-material/ArrowBackOutlined'
+import StoreOutlined from '@mui/icons-material/StoreOutlined'
+import AdminPanelSettingsOutlined from '@mui/icons-material/AdminPanelSettingsOutlined'
+import AccountTreeOutlined from '@mui/icons-material/AccountTreeOutlined'
+import ScheduleOutlined from '@mui/icons-material/ScheduleOutlined'
+import MeetingRoomOutlined from '@mui/icons-material/MeetingRoomOutlined'
 import { useI18n } from '#/i18n/i18n'
-import { rememberRole, rememberSchool, useSchool, type Role, type SchoolCtx } from '#/lib/session'
+import { rememberRole, rememberSchool, useSchool, type Permission, type Role, type SchoolCtx } from '#/lib/session'
 import { supabase } from '#/lib/supabase/client'
 import { tokens } from '#/theme/theme'
 import { ContextSwitcher } from './ContextSwitcher'
@@ -57,24 +63,45 @@ import { QuickActions } from './QuickActions'
 import AutoAwesomeOutlined from '@mui/icons-material/AutoAwesomeOutlined'
 import { useAssistantUi } from '#/features/assistant/shell'
 
-type NavItem = { to: string; key: string; icon: React.ReactNode; roles: Role[]; when?: (ctx: SchoolCtx) => boolean }
+// `roles`: shown to these roles whatever their permissions (their children,
+// themselves...); `permissions`: also shown to anyone holding one of them.
+type NavItem = { to: string; key: string; icon: React.ReactNode; roles: Role[]; permissions?: Permission[]; when?: (ctx: SchoolCtx) => boolean }
 
 const NAV: NavItem[] = [
   { to: '/', key: 'nav.dashboard', icon: <DashboardOutlined />, roles: ['admin', 'staff', 'teacher', 'parent', 'student'] },
-  { to: '/setup', key: 'nav.settings', icon: <SettingsOutlined />, roles: ['admin'] },
-  { to: '/team', key: 'nav.team', icon: <GroupsOutlined />, roles: ['admin'] },
-  { to: '/classes', key: 'nav.classes', icon: <ClassOutlined />, roles: ['admin', 'staff'] },
-  { to: '/students', key: 'nav.students', icon: <FaceOutlined />, roles: ['admin', 'staff'] },
-  { to: '/preregistrations', key: 'nav.preregistrations', icon: <HowToRegOutlined />, roles: ['admin', 'staff'] },
-  { to: '/agenda', key: 'nav.agenda', icon: <EventNoteOutlined />, roles: ['admin', 'staff'] },
-  { to: '/events', key: 'nav.events', icon: <CakeOutlined />, roles: ['admin', 'staff'] },
+  // Admins find the classes in the settings (the year's section)
+  { to: '/classes', key: 'nav.classes', icon: <ClassOutlined />, roles: [], permissions: ['classes.view_all'], when: (c) => !c.isAdmin },
+  { to: '/students', key: 'nav.students', icon: <FaceOutlined />, roles: [], permissions: ['students.view'] },
+  { to: '/preregistrations', key: 'nav.preregistrations', icon: <HowToRegOutlined />, roles: [], permissions: ['preregistrations.view'] },
+  { to: '/agenda', key: 'nav.agenda', icon: <EventNoteOutlined />, roles: [], permissions: ['agenda.view'] },
+  { to: '/events', key: 'nav.events', icon: <CakeOutlined />, roles: [], permissions: ['events.birthdays'] },
   { to: '/timetable', key: 'nav.timetable', icon: <CalendarMonthOutlined />, roles: ['admin', 'staff', 'teacher', 'parent', 'student'] },
-  { to: '/attendance', key: 'nav.attendance', icon: <FactCheckOutlined />, roles: ['admin', 'staff', 'teacher', 'parent', 'student'] },
-  { to: '/homework', key: 'nav.homework', icon: <MenuBookOutlined />, roles: ['teacher', 'parent', 'student'] },
-  { to: '/announcements', key: 'nav.announcements', icon: <CampaignOutlined />, roles: ['admin', 'staff', 'teacher', 'parent'] },
-  { to: '/fees', key: 'nav.fees', icon: <PaymentsOutlined />, roles: ['admin', 'staff', 'parent'], when: (c) => c.role === 'parent' || c.canFees },
-  { to: '/cases', key: 'nav.cases', icon: <ForumOutlined />, roles: ['admin', 'staff', 'parent'] },
+  { to: '/attendance', key: 'nav.attendance', icon: <FactCheckOutlined />, roles: ['parent', 'student'], permissions: ['attendance.view_all', 'attendance.take_own'] },
+  { to: '/homework', key: 'nav.homework', icon: <MenuBookOutlined />, roles: ['parent', 'student'], permissions: ['homework.own'] },
+  { to: '/announcements', key: 'nav.announcements', icon: <CampaignOutlined />, roles: ['teacher', 'parent'], permissions: ['announcements.view_all'] },
+  { to: '/fees', key: 'nav.fees', icon: <PaymentsOutlined />, roles: ['parent'], permissions: ['fees.view'] },
+  { to: '/cases', key: 'nav.cases', icon: <ForumOutlined />, roles: ['parent'], permissions: ['messages.view'] },
 ]
+
+// The settings' own nav (admin): what belongs to the school, then what belongs
+// to the selected school year. `tab` = a section of /setup.
+type SettingsItem = { key: string; icon: React.ReactNode; to: '/setup' | '/team' | '/classes'; tab?: string }
+const SCHOOL_SETTINGS: SettingsItem[] = [
+  { to: '/setup', tab: 'school', key: 'settings.tab.school', icon: <StoreOutlined /> },
+  { to: '/team', key: 'settings.nav.team', icon: <GroupsOutlined /> },
+  { to: '/setup', tab: 'roles', key: 'settings.tab.roles', icon: <AdminPanelSettingsOutlined /> },
+  { to: '/setup', tab: 'structure', key: 'settings.tab.structure', icon: <AccountTreeOutlined /> },
+  { to: '/setup', tab: 'schedule', key: 'settings.tab.schedule', icon: <ScheduleOutlined /> },
+  { to: '/setup', tab: 'rooms', key: 'settings.tab.rooms', icon: <MeetingRoomOutlined /> },
+]
+const YEAR_SETTINGS: SettingsItem[] = [
+  { to: '/classes', key: 'nav.classes', icon: <ClassOutlined /> },
+  { to: '/setup', tab: 'hours', key: 'settings.tab.hours', icon: <MenuBookOutlined /> },
+]
+const SETTINGS_PATHS = ['/setup', '/team', '/classes']
+export function isSettingsPath(pathname: string, ctx: SchoolCtx) {
+  return ctx.isAdmin && SETTINGS_PATHS.includes(pathname)
+}
 
 export const SIDEBAR_WIDTH = 236
 // Folded sidebar: icons only (pages that need the width, e.g. the timetable editor)
@@ -304,7 +331,8 @@ function Sidebar({ onNavigate, compact, onFold }: { onNavigate: () => void; comp
   const { t, dir } = useI18n()
   const ctx = useSchool()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const items = NAV.filter((n) => n.roles.includes(ctx.role) && (!n.when || n.when(ctx)))
+  const items = NAV.filter((n) => (n.roles.includes(ctx.role) || !!n.permissions?.some((p) => ctx.can(p))) && (!n.when || n.when(ctx)))
+  const settings = isSettingsPath(pathname, ctx)
   // Chevron towards where the sidebar would grow or shrink (mirrored in RTL)
   const unfoldIcon = (compact ? dir !== 'rtl' : dir === 'rtl') ? <ChevronRightOutlined fontSize="small" /> : <ChevronLeftOutlined fontSize="small" />
 
@@ -332,29 +360,27 @@ function Sidebar({ onNavigate, compact, onFold }: { onNavigate: () => void; comp
       <Collapse in={!compact} timeout={200}>
         <ContextSwitcher />
       </Collapse>
-      <QuickActions onDone={onNavigate} compact={compact} />
-
-      <Stack spacing={0.25}>
-        <AssistantNavItem onDone={onNavigate} compact={compact} />
-        {items.map((n) => {
-          const on = n.to === '/' ? pathname === '/' : pathname.startsWith(n.to)
-          return (
-            <Tooltip key={n.to} title={compact ? t(n.key) : ''} placement="right">
-              <Box
-                component={Link}
+      {settings ? (
+        <SettingsNav onNavigate={onNavigate} compact={compact} />
+      ) : (
+        <>
+          <QuickActions onDone={onNavigate} compact={compact} />
+          <Stack spacing={0.25}>
+            <AssistantNavItem onDone={onNavigate} compact={compact} />
+            {items.map((n) => (
+              <NavLink
+                key={n.to}
                 to={n.to}
+                label={t(n.key)}
+                icon={n.icon}
+                on={n.to === '/' ? pathname === '/' : pathname.startsWith(n.to)}
+                compact={compact}
                 onClick={onNavigate}
-                aria-current={on ? 'page' : undefined}
-                aria-label={t(n.key)}
-                sx={navItemSx(on)}
-              >
-                {n.icon}
-                <NavLabel hidden={compact}>{t(n.key)}</NavLabel>
-              </Box>
-            </Tooltip>
-          )
-        })}
-      </Stack>
+              />
+            ))}
+          </Stack>
+        </>
+      )}
 
       <Box sx={{ flex: 1 }} />
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', px: 0.5, pt: 1.5, borderTop: `1px solid ${tokens.line}` }}>
@@ -363,7 +389,96 @@ function Sidebar({ onNavigate, compact, onFold }: { onNavigate: () => void; comp
         </Collapse>
         <ThemeToggle />
       </Stack>
+      {ctx.isAdmin && (
+        <Box sx={{ mt: 1 }}>
+          <NavLink to="/setup" label={t('nav.settings')} icon={<SettingsOutlined />} on={settings} compact={compact} onClick={onNavigate} />
+        </Box>
+      )}
       <UserCard compact={compact} />
+    </Box>
+  )
+}
+
+function NavLink({
+  to,
+  search,
+  label,
+  icon,
+  on,
+  compact,
+  onClick,
+}: {
+  to: string
+  search?: Record<string, string>
+  label: string
+  icon: React.ReactNode
+  on: boolean
+  compact: boolean
+  onClick: () => void
+}) {
+  return (
+    <Tooltip title={compact ? label : ''} placement="right">
+      <Box
+        component={Link}
+        to={to}
+        search={search as never}
+        onClick={onClick}
+        aria-current={on ? 'page' : undefined}
+        aria-label={label}
+        sx={navItemSx(on)}
+      >
+        {icon}
+        <NavLabel hidden={compact}>{label}</NavLabel>
+      </Box>
+    </Tooltip>
+  )
+}
+
+// Small caps heading of a settings section (a rule when the sidebar is folded)
+function NavHeading({ compact, children }: { compact: boolean; children: React.ReactNode }) {
+  return (
+    <Box sx={{ position: 'relative', height: 30, mt: 1.5, mb: 0.25 }}>
+      <Typography
+        component="h2"
+        noWrap
+        sx={{ px: 1, pt: 1, fontSize: 11.5, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: tokens.sidebarMuted, opacity: compact ? 0 : 1, transition: `opacity ${EASE}` }}
+      >
+        {children}
+      </Typography>
+      {compact && <Box sx={{ position: 'absolute', insetInline: 8, top: 15, height: '1px', bgcolor: tokens.line }} />}
+    </Box>
+  )
+}
+
+// The settings replace the main nav: a way back, the school's settings, then
+// the selected school year's.
+function SettingsNav({ onNavigate, compact }: { onNavigate: () => void; compact: boolean }) {
+  const { t } = useI18n()
+  const ctx = useSchool()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const tab = useRouterState({ select: (s) => (s.location.search as { tab?: string }).tab ?? 'school' })
+  const isOn = (i: SettingsItem) => pathname === i.to && (!i.tab || i.tab === tab)
+  const render = (i: SettingsItem) => (
+    <NavLink
+      key={i.key}
+      to={i.to}
+      search={i.tab ? { tab: i.tab } : undefined}
+      label={t(i.key)}
+      icon={i.icon}
+      on={isOn(i)}
+      compact={compact}
+      onClick={onNavigate}
+    />
+  )
+  return (
+    <Box sx={{ mt: 1.5 }}>
+      <NavLink to="/" label={t('settings.nav.back')} icon={<ArrowBackOutlined />} on={false} compact={compact} onClick={onNavigate} />
+      <NavHeading compact={compact}>{t('settings.nav.school')}</NavHeading>
+      <Stack spacing={0.25}>{SCHOOL_SETTINGS.map(render)}</Stack>
+      <NavHeading compact={compact}>
+        {ctx.year ? t('settings.nav.year', { name: ctx.year.name }) : t('settings.nav.noYear')}
+      </NavHeading>
+      <Stack spacing={0.25}>{YEAR_SETTINGS.map(render)}</Stack>
     </Box>
   )
 }

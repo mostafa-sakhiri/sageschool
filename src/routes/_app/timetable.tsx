@@ -42,7 +42,7 @@ function TimetablePage() {
   }, [editing, openAssistant])
   return (
     <AppShell title={t('nav.timetable')} compactNav={editing}>
-      {ctx.isOffice ? <OfficeView /> : ctx.role === 'teacher' ? <TeacherView memberId={ctx.member.id} /> : <FamilyView />}
+      {ctx.isOffice || ctx.can('timetable.view_all') ? <OfficeView /> : ctx.role === 'teacher' ? <TeacherView memberId={ctx.member.id} /> : <FamilyView />}
     </AppShell>
   )
 }
@@ -92,7 +92,7 @@ function OfficeView() {
         }
       />
       {tabs}
-      {classId && (mode === 'edit' && ctx.isAdmin ? <Builder classId={classId} /> : <RealWeek key={classId} classId={classId} allowExceptions />)}
+      {classId && (mode === 'edit' && ctx.isAdmin ? <Builder classId={classId} /> : <RealWeek key={classId} classId={classId} allowExceptions={ctx.can('timetable.exceptions')} />)}
     </>
   )
 }

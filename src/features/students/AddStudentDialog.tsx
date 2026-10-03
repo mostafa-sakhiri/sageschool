@@ -61,12 +61,14 @@ export function AddStudentDialog({
   const { t, locale } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
+  // Fee installments are created along with the student: needs fees write
+  const canFeesWrite = ctx.can('fees.plans')
   const [yearId, setYearId] = useState(ctx.year?.id ?? '')
   const year = ctx.years.find((y) => y.id === yearId) ?? null
   const classes = useQuery({ ...classesQuery(ctx.school.id, yearId), enabled: !!yearId })
   const plans = useQuery({
     queryKey: ['school', ctx.school.id, 'fee-plans', yearId],
-    enabled: !!yearId && ctx.canFees,
+    enabled: !!yearId && canFeesWrite,
     queryFn: async () =>
       must(
         await supabase
@@ -143,7 +145,7 @@ export function AddStudentDialog({
             started_on: todayIso() > year.starts_on && todayIso() <= year.ends_on ? todayIso() : year.starts_on,
           }),
         )
-      if (ctx.canFees && year) {
+      if (canFeesWrite && year) {
         // Every month of the year becomes an installment; the months the family
         // already paid get their payment right away.
         const rows = [
@@ -254,7 +256,7 @@ export function AddStudentDialog({
             </Stack>
             {full && <Alert severity="warning">{t('students.classFull')}</Alert>}
 
-            {ctx.canFees && year && (
+            {canFeesWrite && year && (
               <>
                 <Divider />
                 <Box>
