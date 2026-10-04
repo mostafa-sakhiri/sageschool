@@ -265,6 +265,8 @@ function ScheduleSettings() {
   const nodes = useQuery(nodesQuery(ctx.school.id))
   const cycles = (nodes.data ?? []).filter((n) => n.kind === 'cycle' && n.code)
   const [draft, setDraft] = useState<Horaire[] | null>(null)
+  // What is saved, to tell unsaved changes apart
+  const [saved, setSaved] = useState<string | null>(null)
 
   useEffect(() => {
     if (!nodes.data || draft) return
@@ -277,7 +279,9 @@ function ScheduleSettings() {
       if (fallback) return { ...structuredClone(fallback), id: c.code!, name: c.name, cycles: [c.code!] }
       return presetHoraire(c.code!, c.name)
     })
-    setDraft(list.length ? list : stored)
+    const initial = list.length ? list : stored
+    setDraft(initial)
+    setSaved(JSON.stringify(initial))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes.data])
 
@@ -287,7 +291,9 @@ function ScheduleSettings() {
       delete settings.opening
       must(await supabase.from('schools').update({ settings: settings as Json }).eq('id', ctx.school.id))
     },
-    onSuccess: async () => {
+    onSuccess: async (_, list) => {
+      setDraft(list)
+      setSaved(JSON.stringify(list))
       await queryClient.invalidateQueries({ queryKey: ['session'] })
       await router.invalidate()
     },
@@ -299,21 +305,22 @@ function ScheduleSettings() {
     return c ? { ...h, name: nodeName(c, locale) } : h
   })
   const invalid = draft.some((h) => h.days.length === 0 || weeklyTeachable(h) <= 0)
+  const dirty = JSON.stringify(draft) !== saved
+  // Pauses in time order; names stay as stored (French content)
+  const toSave = () =>
+    draft.map((h) => {
+      const sorted = (d: Horaire['base']) => ({ ...d, pauses: [...d.pauses].sort((a, b) => a.start.localeCompare(b.start)) })
+      return {
+        ...h,
+        name: cycles.find((c) => h.cycles.includes(c.code!))?.name ?? h.name,
+        base: sorted(h.base),
+        overrides: Object.fromEntries(Object.entries(h.overrides).map(([k, v]) => [k, sorted(v)])),
+      }
+    })
   return (
     <Stack spacing={2}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
-        <Typography sx={{ flex: 1, color: tokens.inkMuted, fontSize: 14 }}>{t('sched.settingsHint')}</Typography>
-        <Button
-          variant="contained"
-          disabled={!ctx.isAdmin || invalid}
-          loading={save.isPending}
-          onClick={() => save.mutate(draft.map((h) => ({ ...h, name: cycles.find((c) => h.cycles.includes(c.code!))?.name ?? h.name })))}
-        >
-          {t('common.save')}
-        </Button>
-      </Stack>
-      {save.isSuccess && !save.isPending && <Alert severity="success">{t('sched.saved')}</Alert>}
-      {save.isError && <Alert severity="error">{errorMessage(save.error, t)}</Alert>}
+      <Typography sx={{ color: tokens.inkMuted, fontSize: 14 }}>{t('sched.settingsHint')}</Typography>
+      {save.isSuccess && !dirty && <Alert severity="success">{t('sched.saved')}</Alert>}
       <ScheduleEditor
         value={shown}
         onChange={(list) => {
@@ -321,6 +328,22 @@ function ScheduleSettings() {
           setDraft(list)
         }}
       />
+      {dirty && (
+        <Paper
+          elevation={6}
+          role="status"
+          sx={{ position: 'sticky', bottom: 16, p: 1.5, px: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap', border: `1px solid ${tokens.warnLine}`, bgcolor: tokens.warnSoft, zIndex: 2 }}
+        >
+          <Typography sx={{ flex: 1, minWidth: 200, fontWeight: 600 }}>{invalid ? t('sched.unsavedInvalid') : t('sched.unsaved')}</Typography>
+          {save.isError && <Typography sx={{ color: tokens.dangerInk, fontSize: 13.5, width: '100%' }}>{errorMessage(save.error, t)}</Typography>}
+          <Button color="inherit" disabled={save.isPending} onClick={() => (save.reset(), setDraft(JSON.parse(saved!)))}>
+            {t('sched.discard')}
+          </Button>
+          <Button variant="contained" disabled={!ctx.isAdmin || invalid} loading={save.isPending} onClick={() => save.mutate(toSave())}>
+            {t('common.save')}
+          </Button>
+        </Paper>
+      )}
     </Stack>
   )
 }
