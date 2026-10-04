@@ -38,6 +38,7 @@ const ids = new Map<string, string>()
 
 export function StudentAbsencesTool() {
   const ctx = useSchool()
+  const { locale } = useI18n()
   const queryClient = useQueryClient()
   useFrontendTool(
     {
@@ -77,13 +78,16 @@ export function StudentAbsencesTool() {
           days: summary?.days ?? 0,
           unjustifiedDays: summary?.unjustified_days ?? 0,
           lates: summary?.lates ?? 0,
-          lastUnjustified: [...new Set(last.map((r) => r.session_date))].slice(0, 5),
+          // written out, as the assistant will quote them
+          lastUnjustified: [...new Set(last.map((r) => r.session_date))]
+            .slice(0, 5)
+            .map((d) => formatDate(d, locale, { weekday: 'long', day: 'numeric', month: 'long' })),
         }
         return JSON.stringify(answer)
       },
       render: (props) => <AbsencesCard status={props.status} result={props.result} studentId={ids.get(props.toolCallId)} />,
     },
-    [ctx.school.id, ctx.year?.id],
+    [ctx.school.id, ctx.year?.id, locale],
   )
   return null
 }

@@ -22,7 +22,7 @@ const parameters = z.object({
   left: z.string().optional().describe('Heure de départ HH:MM'),
   absent: z.boolean().optional().describe('Absent toute la journée'),
   justified: z.boolean().optional().describe('Absence ou retard justifié (prévenu, certificat…)'),
-  note: z.string().optional().describe('Le motif ou une remarque'),
+  note: z.string().optional().describe("Seulement le motif ou la remarque que l'utilisateur a donné (« malade », « RDV médical »). Sinon, ne rien mettre."),
 })
 type Args = z.infer<typeof parameters>
 
