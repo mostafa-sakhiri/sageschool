@@ -92,9 +92,12 @@ const PAGES = {
   announcements: '/announcements',
   fees: '/fees',
   cases: '/cases',
+  events: '/events',
   team: '/team',
   settings: '/setup',
 } as const
+// Réglages, section by section (team and classes are pages of their own)
+const SECTIONS = ['school', 'team', 'roles', 'structure', 'schedule', 'rooms', 'hours', 'classes', 'years'] as const
 type Page = keyof typeof PAGES
 // What the role must hold to open a page (the assistant is the office's)
 const PAGE_PERMISSION: Partial<Record<Page, Permission>> = {
@@ -106,10 +109,21 @@ const PAGE_PERMISSION: Partial<Record<Page, Permission>> = {
   announcements: 'announcements.view_all',
   fees: 'fees.view',
   cases: 'messages.view',
+  events: 'events.birthdays',
 }
 
 const openParams = z.object({
-  page: z.enum(Object.keys(PAGES) as [Page, ...Page[]]),
+  page: z
+    .enum(Object.keys(PAGES) as [Page, ...Page[]])
+    .describe(
+      "dashboard: Tableau de bord ; students: Élèves ; classes: Classes ; preregistrations: Pré-inscriptions ; agenda: Agenda (rendez-vous) ; timetable: Emplois du temps ; attendance: Présences (élèves et professeurs, absences, alertes) ; announcements: Annonces ; fees: Paiements (scolarité, impayés, relances) ; cases: Demandes des parents (questions, réclamations, plaintes) ; events: Événements et anniversaires ; team: Équipe ; settings: Réglages (préciser section)",
+    ),
+  section: z
+    .enum(SECTIONS)
+    .optional()
+    .describe(
+      "Pour settings : school (infos de l'école), team (équipe), roles (rôles et permissions), structure (cycles et niveaux), schedule (horaires d'ouverture et pauses), rooms (salles, bâtiments), hours (matières et volumes horaires), classes, years (années scolaires)",
+    ),
   className: z.string().optional().describe("Pour l'emploi du temps : la classe à ouvrir (nom exact)"),
   edit: z.boolean().optional().describe("Pour l'emploi du temps : ouvrir l'éditeur (brouillon) plutôt que la semaine"),
 })
@@ -125,8 +139,15 @@ export function OpenPageTool() {
       description:
         "Ouvrir une page de l'application (le chat reste ouvert). Pour modifier un emploi du temps, ouvrir 'timetable' avec la classe et edit=true : les outils d'emploi du temps n'existent que sur cette page.",
       parameters: openParams,
-      handler: async ({ page, className, edit }) => {
+      handler: async ({ page, section, className, edit }) => {
         if ((page === 'team' || page === 'settings') && !ctx.isAdmin) return JSON.stringify({ opened: false, reason: 'admin only' })
+        if (page === 'settings') {
+          const s = section ?? 'school'
+          if (s === 'team') await navigate({ to: '/team' })
+          else if (s === 'classes') await navigate({ to: '/classes' })
+          else await navigate({ to: '/setup', search: { tab: s === 'school' ? undefined : s } })
+          return JSON.stringify({ opened: true, page: 'settings', section: s })
+        }
         const needed = PAGE_PERMISSION[page]
         if (needed && !ctx.can(needed)) return JSON.stringify({ opened: false, reason: `no access to ${page}` })
         if (page === 'timetable') {

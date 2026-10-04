@@ -106,6 +106,29 @@ const hoursQuery = (schoolId: string) => ({
     must(await supabase.from('staff_hours').select('member_id, weekday, starts_at, ends_at').eq('school_id', schoolId)) as Hours[],
 })
 
+// The hours a member is expected on a day, outside the table (assistant's
+// presence card): usual hours, else the school's opening (assistants), else
+// the timetable's first and last session.
+export async function fetchExpected(
+  schoolId: string,
+  settings: unknown,
+  member: { id: string; is_assistant: boolean },
+  day: string,
+): Promise<{ start: string | null; end: string | null }> {
+  const weekday = isoWeekday(day)
+  const usual = must(
+    await supabase.from('staff_hours').select('starts_at, ends_at').eq('school_id', schoolId).eq('member_id', member.id).eq('weekday', weekday),
+  )[0]
+  if (usual) return { start: hhmm(usual.starts_at), end: hhmm(usual.ends_at) }
+  if (member.is_assistant) return schoolHours(settings, weekday) ?? { start: null, end: null }
+  const sessions = (must(await supabase.rpc('teacher_day', { p_teacher_member_id: member.id, p_date: day })) as TeacherSession[]).filter(
+    (x) => x.starts_at && x.status !== 'cancelled',
+  )
+  const starts = sessions.map((x) => hhmm(x.starts_at)).sort()
+  const ends = sessions.map((x) => hhmm(x.ends_at)).sort()
+  return { start: starts[0] ?? null, end: ends.at(-1) ?? null }
+}
+
 // The secrétariat notes when each teacher arrives and leaves. Compared with the
 // teacher's usual hours for that weekday when set, else with the day's
 // timetable (first and last session): late arrivals, early departures and

@@ -18,9 +18,9 @@ import { todayIso } from '#/lib/format'
 import { presetHoraire, readHoraires } from './schedule'
 import { tokens } from '#/theme/theme'
 
-type TplNode = { kind: string; code: string; name: string; name_ar?: string; children?: TplNode[] }
+export type TplNode = { kind: string; code: string; name: string; name_ar?: string; children?: TplNode[] }
 // What opening a cycle or a level did, for the summary
-type Opened = { cycle: TplNode; horaireCreated: boolean; added: Node[]; leaves: Node[]; years: string[]; subjects: number }
+export type Opened = { cycle: TplNode; horaireCreated: boolean; added: Node[]; leaves: Node[]; years: string[]; subjects: number }
 
 // Réglages › Structure: every cycle of the programme, open or not. An open
 // cycle's levels are chips (click to open or close one); a closed cycle
@@ -49,54 +49,7 @@ export function StructureSection() {
     await router.invalidate()
   }
 
-  const open = useMutation({
-    mutationFn: async ({ codes, cycle }: { codes: string[]; cycle: TplNode }): Promise<Opened> => {
-      const before = new Set((nodes.data ?? []).map((n) => n.id))
-      must(await supabase.rpc('add_curriculum_nodes', { p_school_id: ctx.school.id, p_template_code: TEMPLATE, p_codes: codes }))
-      // The cycle's horaire, if it has none yet
-      const horaires = readHoraires(ctx.school.settings)
-      const horaireCreated = !horaires.some((h) => h.cycles.includes(cycle.code))
-      if (horaireCreated) {
-        const settings = { ...(ctx.school.settings as Record<string, unknown>), schedules: [...horaires, presetHoraire(cycle.code, cycle.name)] }
-        must(await supabase.from('schools').update({ settings: settings as Json }).eq('id', ctx.school.id))
-      }
-      // Subjects and their hours for every year not over yet
-      const today = todayIso()
-      const years = ctx.years.filter((y) => y.ends_on >= today)
-      for (const y of years)
-        must(
-          await supabase.rpc('apply_curriculum_template_hours', {
-            p_school_id: ctx.school.id,
-            p_academic_year_id: y.id,
-            p_template_code: TEMPLATE,
-            p_only_under: codes,
-          }),
-        )
-      // What was added: its levels (where classes go) and their subjects
-      await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'nodes'] })
-      const all = await queryClient.fetchQuery(nodesQuery(ctx.school.id))
-      const under = all.filter((n) => codes.some((c) => n.path.some((id) => all.find((x) => x.id === id)?.code === c)))
-      const added = under.filter((n) => !before.has(n.id))
-      const leaves = leafNodes(all).filter((n) => under.some((u) => u.id === n.id))
-      const subjects = years.length
-        ? new Set(
-            must(
-              await supabase
-                .from('node_subject_hours')
-                .select('subject_id')
-                .eq('academic_year_id', years[0].id)
-                .in('node_id', under.map((n) => n.id))
-                .gt('weekly_minutes', 0),
-            ).map((x) => x.subject_id),
-          ).size
-        : 0
-      return { cycle, horaireCreated, added, leaves, years: years.map((y) => y.name), subjects }
-    },
-    onSuccess: async (summary) => {
-      setOpened(summary)
-      await refresh()
-    },
-  })
+  const open = useOpenCurriculum((summary) => setOpened(summary))
   const close = useMutation({
     mutationFn: async (code: string) => {
       const node = nodes.data?.find((n) => n.code === code)
@@ -201,11 +154,72 @@ export function StructureSection() {
   )
 }
 
+// Opens cycles or levels of the programme with everything they need: the
+// nodes, the cycle's horaire if it has none, the subjects and hours for
+// every year not over yet. Returns what was done (for the summary). Shared
+// by Réglages › Structure and the assistant.
+export function useOpenCurriculum(onOpened?: (summary: Opened) => void) {
+  const ctx = useSchool()
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const nodes = useQuery(nodesQuery(ctx.school.id))
+  return useMutation({
+    mutationFn: async ({ codes, cycle }: { codes: string[]; cycle: TplNode }): Promise<Opened> => {
+      const before = new Set((nodes.data ?? []).map((n) => n.id))
+      must(await supabase.rpc('add_curriculum_nodes', { p_school_id: ctx.school.id, p_template_code: TEMPLATE, p_codes: codes }))
+      // The cycle's horaire, if it has none yet
+      const horaires = readHoraires(ctx.school.settings)
+      const horaireCreated = !horaires.some((h) => h.cycles.includes(cycle.code))
+      if (horaireCreated) {
+        const settings = { ...(ctx.school.settings as Record<string, unknown>), schedules: [...horaires, presetHoraire(cycle.code, cycle.name)] }
+        must(await supabase.from('schools').update({ settings: settings as Json }).eq('id', ctx.school.id))
+      }
+      // Subjects and their hours for every year not over yet
+      const today = todayIso()
+      const years = ctx.years.filter((y) => y.ends_on >= today)
+      for (const y of years)
+        must(
+          await supabase.rpc('apply_curriculum_template_hours', {
+            p_school_id: ctx.school.id,
+            p_academic_year_id: y.id,
+            p_template_code: TEMPLATE,
+            p_only_under: codes,
+          }),
+        )
+      // What was added: its levels (where classes go) and their subjects
+      await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'nodes'] })
+      const all = await queryClient.fetchQuery(nodesQuery(ctx.school.id))
+      const under = all.filter((n) => codes.some((c) => n.path.some((id) => all.find((x) => x.id === id)?.code === c)))
+      const added = under.filter((n) => !before.has(n.id))
+      const leaves = leafNodes(all).filter((n) => under.some((u) => u.id === n.id))
+      const subjects = years.length
+        ? new Set(
+            must(
+              await supabase
+                .from('node_subject_hours')
+                .select('subject_id')
+                .eq('academic_year_id', years[0].id)
+                .in('node_id', under.map((n) => n.id))
+                .gt('weekly_minutes', 0),
+            ).map((x) => x.subject_id),
+          ).size
+        : 0
+      return { cycle, horaireCreated, added, leaves, years: years.map((y) => y.name), subjects }
+    },
+    onSuccess: async (summary) => {
+      await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id] })
+      await queryClient.invalidateQueries({ queryKey: ['session'] })
+      await router.invalidate()
+      onOpened?.(summary)
+    },
+  })
+}
+
 const LETTERS = 'ABCDEFGHIJ'
 
 // After opening: what is ready, links to check it, and the one step left
 // (classes), done here in one click if wanted.
-function OpenedDialog({ summary, onClose }: { summary: Opened; onClose: () => void }) {
+export function OpenedDialog({ summary, onClose }: { summary: Opened; onClose: () => void }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
   const navigate = useNavigate()

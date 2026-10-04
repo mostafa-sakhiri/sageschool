@@ -107,7 +107,9 @@ function SchoolContextForAgent() {
       page: pathname,
       pageMode: typeof search.mode === 'string' ? search.mode : null,
       classes: (classes.data ?? []).map((c) => c.name),
+      cycles: (nodes.data ?? []).filter((n) => n.kind === 'cycle').map((n) => n.name),
       levels: (nodes.data ?? []).filter((n) => n.kind === 'level').map((n) => nodeLabel(n, nodes.data ?? [], 'fr')),
+      isAdmin: ctx.isAdmin,
     },
   })
   return null

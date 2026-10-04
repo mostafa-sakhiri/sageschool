@@ -29,6 +29,23 @@ assert.equal(byName('Dupont').item, null)
 assert.equal(byName('').item, null)
 ok('teachers: full name, civility + last name, case and accents')
 
+// Cycles and levels of the programme ("ouvre le collège")
+const programme = [
+  'Préscolaire', 'Petite section', 'Moyenne section', 'Grande section',
+  'Primaire', '1ère année primaire', '2ème année primaire',
+  'Collège', '1ère année collège', '2ème année collège', '3ème année collège',
+  'Lycée', 'Tronc commun', '1ère année Bac', '2ème année Bac',
+].map((name) => ({ name }))
+const cycle = (q: string) => matchOne(programme, (x) => x.name, q).item?.name ?? null
+assert.equal(cycle('collège'), 'Collège')
+assert.equal(cycle('college'), 'Collège')
+assert.equal(cycle('le collège'), 'Collège')
+assert.equal(cycle('lycee'), 'Lycée')
+assert.equal(cycle('petite section'), 'Petite section')
+assert.equal(cycle('tronc commun'), 'Tronc commun')
+assert.equal(cycle('maternelle'), null)
+ok('programme: cycles and levels by name, accents and articles aside')
+
 const twoSarahs = [...teachers, { id: 't5', name: 'Sarah Benjelloun' }]
 const amb = matchOne(twoSarahs, (x) => x.name, 'Sarah')
 assert.equal(amb.item, null)
