@@ -26,6 +26,7 @@ import {
   resolvedHoursQuery,
   subjectsQuery,
 } from '#/features/structure/api'
+import { useFillHeight } from '#/lib/useFillHeight'
 import { tokens } from '#/theme/theme'
 
 // "La matière d'abord" (mockup W2): subjects on one side, every level with
@@ -40,6 +41,7 @@ export function HoursSection({ schoolId, yearId }: { schoolId: string; yearId: s
   const resolved = useQuery(resolvedHoursQuery(schoolId, yearId))
   const [selected, setSelected] = useState<string | null>(null)
   const [newSubject, setNewSubject] = useState('')
+  const fill = useFillHeight()
 
   const invalidate = () =>
     Promise.all([
@@ -120,8 +122,8 @@ export function HoursSection({ schoolId, yearId }: { schoolId: string; yearId: s
       {(setMinutes.isError || addSubject.isError) && (
         <Alert severity="error">{errorMessage(setMinutes.error ?? addSubject.error, t)}</Alert>
       )}
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '280px 1fr' } }}>
-        <Paper variant="outlined" sx={{ p: 1 }}>
+      <Box ref={fill.ref} sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '280px 1fr' }, height: { md: fill.height }, minHeight: { md: 420 } }}>
+        <Paper variant="outlined" sx={{ p: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <Stack
             direction="row"
             spacing={1}
@@ -143,7 +145,7 @@ export function HoursSection({ schoolId, yearId }: { schoolId: string; yearId: s
             </Button>
           </Stack>
           {subjectList.length === 0 && <Typography sx={{ p: 2 }}>{t('hours.noSubjects')}</Typography>}
-          <List dense sx={{ maxHeight: 460, overflowY: 'auto' }}>
+          <List dense sx={{ flex: 1, minHeight: 0, overflowY: 'auto', maxHeight: { xs: 460, md: 'none' } }}>
             {subjectList.map((s) => (
               <ListItemButton key={s.id} selected={s.id === current} onClick={() => setSelected(s.id)} sx={{ borderRadius: 2 }}>
                 <ListItemText
@@ -156,7 +158,7 @@ export function HoursSection({ schoolId, yearId }: { schoolId: string; yearId: s
           </List>
         </Paper>
 
-        <Paper variant="outlined" sx={{ p: 2 }}>
+        <Paper variant="outlined" sx={{ p: 2, overflowY: 'auto', minHeight: 0 }}>
           {!current ? (
             <EmptyState title={t('hours.noSubjects')} />
           ) : (
