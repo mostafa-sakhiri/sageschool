@@ -16,7 +16,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(108);
+SELECT plan(110);
 
 -- Impersonate a user: JWT claims + the authenticated role (RESET ROLE first).
 CREATE FUNCTION pg_temp.login(p_email text) RETURNS void LANGUAGE plpgsql AS $$
@@ -552,6 +552,17 @@ SELECT lives_ok($$INSERT INTO room_areas (id, school_id, kind, name) VALUES ('7b
   'rooms: the admin adds a building and a floor in it');
 SELECT throws_ok($$INSERT INTO room_areas (school_id, parent_id, kind, name) VALUES ('5c000000-0000-0000-0000-00000000000a', '7b000000-0000-0000-0000-000000000002', 'floor', 'Mezzanine')$$,
   '23514', NULL, 'rooms: a floor goes in a building, not in a floor');
+RESET ROLE;
+
+-- Absence summaries (migration 20261005090000) run as the caller: RLS applies
+SELECT pg_temp.login('compta.a@test.ma');
+SELECT is((SELECT count(*) FROM student_absence_summary('5c000000-0000-0000-0000-00000000000a', '2026-09-01', '2027-06-30'))::int, 0,
+  'absences: a role without attendance permissions gets no counts');
+RESET ROLE;
+UPDATE school_roles SET permissions = permissions || ARRAY['attendance.view_all'] WHERE school_id = '5c000000-0000-0000-0000-00000000000a' AND builtin_key = 'staff';
+SELECT pg_temp.login('staff.a@test.ma');
+SELECT ok((SELECT sum(days) FROM student_absence_summary('5c000000-0000-0000-0000-00000000000a', '2026-09-01', '2027-06-30')) > 0,
+  'absences: the secrétariat gets the school''s counts');
 RESET ROLE;
 
 SELECT * FROM finish();

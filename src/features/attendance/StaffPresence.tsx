@@ -28,6 +28,7 @@ import {
 import LoginOutlined from '@mui/icons-material/LoginOutlined'
 import LogoutOutlined from '@mui/icons-material/LogoutOutlined'
 import ScheduleOutlined from '@mui/icons-material/ScheduleOutlined'
+import UndoOutlined from '@mui/icons-material/UndoOutlined'
 import { Tag, initials, type Tone } from '#/components/ui'
 import { EmptyState, Loading } from '#/components/states'
 import { useSchool } from '#/lib/session'
@@ -38,12 +39,11 @@ import { formatPhone, hhmm, nowTime, todayIso, toMinutes } from '#/lib/format'
 import { membersQuery, type MemberRow } from '#/features/team/api'
 import type { TeacherSession } from '#/features/timetable/api'
 import { dayOf, readHoraires } from '#/features/setup/schedule'
+import { GRACE, StaffIncidentsDialog } from './history'
 import { TimeField } from '#/components/TimeField'
 import { tokens } from '#/theme/theme'
 import { WhatsAppButton } from '#/components/WhatsApp'
 
-// Minutes of grace before an arrival counts as late (or a departure as early)
-const GRACE = 5
 // Late arrivals in a month from which it becomes "excessive"
 const EXCESSIVE_LATES = 3
 
@@ -54,6 +54,7 @@ type Presence = {
   arrived_at: string | null
   left_at: string | null
   absent: boolean
+  justified: boolean
   note: string | null
   expected_start: string | null
   expected_end: string | null
@@ -159,15 +160,17 @@ export function StaffPresencePanel() {
       must(
         await supabase
           .from('staff_presence')
-          .select('id, member_id, day, arrived_at, left_at, absent, note, expected_start, expected_end')
+          .select('id, member_id, day, arrived_at, left_at, absent, justified, note, expected_start, expected_end')
           .eq('school_id', ctx.school.id)
           .gte('day', monthStart)
           .lt('day', nextMonth(monthStart)),
       ) as Presence[],
   })
 
+  // Justified ones don't count towards "excessive"
   const latesThisMonth = (memberId: string) =>
-    (presence.data ?? []).filter((p) => p.member_id === memberId && (lateBy(p) > 0 || earlyBy(p) > 0 || p.absent)).length
+    (presence.data ?? []).filter((p) => p.member_id === memberId && !p.justified && (lateBy(p) > 0 || earlyBy(p) > 0 || p.absent)).length
+  const [historyOf, setHistoryOf] = useState<MemberRow | null>(null)
 
   return (
     <>
@@ -209,6 +212,7 @@ export function StaffPresencePanel() {
                   onEditHours={() => setEditingHours(m)}
                   row={(presence.data ?? []).find((p) => p.member_id === m.id && p.day === day)}
                   monthIssues={latesThisMonth(m.id)}
+                  onHistory={() => setHistoryOf(m)}
                   monthStart={monthStart}
                 />
               ))}
@@ -216,6 +220,7 @@ export function StaffPresencePanel() {
           </Table>
         </Paper>
       )}
+      {historyOf && <StaffIncidentsDialog memberId={historyOf.id} name={historyOf.user?.full_name ?? ''} onClose={() => setHistoryOf(null)} />}
       {editingHours && <HoursDialog member={editingHours} day={day} hours={(hours.data ?? []).filter((h) => h.member_id === editingHours.id)} onClose={() => setEditingHours(null)} />}
     </>
   )
@@ -232,6 +237,7 @@ function PresenceRow({
   row,
   monthIssues,
   monthStart,
+  onHistory,
 }: {
   memberId: string
   name: string
@@ -243,12 +249,13 @@ function PresenceRow({
   row?: Presence
   monthIssues: number
   monthStart: string
+  onHistory: () => void
 }) {
   const { t } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
-  // Nothing recorded yet: arrival and departure start from the expected
-  // hours (greyed) until the secrétariat confirms or changes them
+  // Nothing recorded yet: arrival and departure are filled with the expected
+  // hours, so the secrétariat confirms in one click or corrects first
   const planned = !row
   const initialArrived = row ? hhmm(row.arrived_at) : (expected?.start ?? '')
   const initialLeft = row ? hhmm(row.left_at) : (expected?.end ?? '')
@@ -256,16 +263,17 @@ function PresenceRow({
   const [left, setLeft] = useState(initialLeft)
   const [absent, setAbsent] = useState(row?.absent ?? false)
   const [note, setNote] = useState(row?.note ?? '')
+  const [justified, setJustified] = useState(row?.justified ?? false)
   const [touched, setTouched] = useState({ arrived: false, left: false })
   useEffect(() => {
     setArrived(initialArrived)
     setLeft(initialLeft)
     setAbsent(row?.absent ?? false)
     setNote(row?.note ?? '')
+    setJustified(row?.justified ?? false)
     setTouched({ arrived: false, left: false })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- expected loads after the row
   }, [row, expected?.start, expected?.end])
-  const suggested = (k: 'arrived' | 'left') => planned && !touched[k] && !absent
 
   const save = useMutation({
     mutationFn: async (patch?: { arrived?: string; left?: string }) =>
@@ -278,6 +286,7 @@ function PresenceRow({
             arrived_at: absent ? null : (patch?.arrived ?? arrived) || null,
             left_at: absent ? null : (patch?.left ?? left) || null,
             absent,
+            justified,
             note: note.trim() || null,
             expected_start: expected?.start ?? null,
             expected_end: expected?.end ?? null,
@@ -287,6 +296,15 @@ function PresenceRow({
         ),
       ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'staff-presence', monthStart] }),
+  })
+  // Recorded by mistake: back to "not recorded" (the expected hours again)
+  const [undoing, setUndoing] = useState(false)
+  const undo = useMutation({
+    mutationFn: async () => must(await supabase.from('staff_presence').delete().eq('id', row!.id)),
+    onSuccess: async () => {
+      setUndoing(false)
+      await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id] })
+    },
   })
 
   const current = { arrived_at: arrived || null, left_at: left || null, expected_start: expected?.start ?? null, expected_end: expected?.end ?? null }
@@ -312,9 +330,10 @@ function PresenceRow({
   // A planned row can be confirmed as it is
   const dirty =
     (planned && (!!arrived || absent)) ||
-    arrived !== hhmm(row?.arrived_at) || left !== hhmm(row?.left_at) || absent !== (row?.absent ?? false) || note !== (row?.note ?? '')
+    arrived !== hhmm(row?.arrived_at) || left !== hhmm(row?.left_at) || absent !== (row?.absent ?? false) || note !== (row?.note ?? '') || justified !== (row?.justified ?? false)
   const isToday = day === todayIso()
-  const redBg = verdicts.some((v) => v.tone === 'danger')
+  const incident = verdicts.some((v) => v.tone === 'danger')
+  const redBg = incident && !justified
 
   return (
     <TableRow sx={{ bgcolor: redBg ? tokens.dangerSoft : undefined }}>
@@ -358,7 +377,6 @@ function PresenceRow({
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
           <PresenceTime
             value={arrived}
-            suggested={suggested('arrived')}
             disabled={absent}
             label={`${t('presence.arrival')} — ${name}`}
             onChange={(v) => (setArrived(v), setTouched((x) => ({ ...x, arrived: true })))}
@@ -387,7 +405,6 @@ function PresenceRow({
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
           <PresenceTime
             value={left}
-            suggested={suggested('left')}
             disabled={absent}
             label={`${t('presence.departure')} — ${name}`}
             onChange={(v) => (setLeft(v), setTouched((x) => ({ ...x, left: true })))}
@@ -412,6 +429,13 @@ function PresenceRow({
       </TableCell>
       <TableCell>
         <Checkbox checked={absent} onChange={(e) => setAbsent(e.target.checked)} slotProps={{ input: { 'aria-label': `${t('presence.absent')} — ${name}` } }} />
+        {incident && (
+          <FormControlLabel
+            control={<Checkbox size="small" checked={justified} onChange={(e) => setJustified(e.target.checked)} />}
+            label={<Typography sx={{ fontSize: 12.5 }}>{t('abs.justifiedF')}</Typography>}
+            sx={{ m: 0, display: 'flex' }}
+          />
+        )}
       </TableCell>
       <TableCell>
         <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
@@ -430,30 +454,56 @@ function PresenceRow({
         />
       </TableCell>
       <TableCell>
-        <Tag tone={monthIssues >= EXCESSIVE_LATES ? 'danger' : monthIssues > 0 ? 'warn' : 'neutral'} label={monthIssues >= EXCESSIVE_LATES ? t('presence.excessive', { n: monthIssues }) : String(monthIssues)} />
+        <Tooltip title={t('abs.seeYear')}>
+          <ButtonBase onClick={onHistory} aria-label={`${t('abs.seeYear')} — ${name}`} sx={{ borderRadius: '6px' }}>
+            <Tag tone={monthIssues >= EXCESSIVE_LATES ? 'danger' : monthIssues > 0 ? 'warn' : 'neutral'} label={monthIssues >= EXCESSIVE_LATES ? t('presence.excessive', { n: monthIssues }) : String(monthIssues)} sx={{ cursor: 'pointer' }} />
+          </ButtonBase>
+        </Tooltip>
       </TableCell>
       <TableCell align="right">
-        <Button size="small" variant={dirty ? 'contained' : 'text'} disabled={!dirty} loading={save.isPending} onClick={() => save.mutate(undefined)}>
-          {planned ? t('presence.confirm') : t('common.save')}
-        </Button>
-        {save.isError && (
+        <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end', alignItems: 'center' }}>
+          <Button size="small" variant={dirty ? 'contained' : 'text'} disabled={!dirty} loading={save.isPending} onClick={() => save.mutate(undefined)}>
+            {planned ? t('presence.confirm') : t('common.save')}
+          </Button>
+          {row && (
+            <Tooltip title={t('presence.undo')}>
+              <IconButton size="small" aria-label={`${t('presence.undo')} — ${name}`} onClick={() => setUndoing(true)}>
+                <UndoOutlined fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Stack>
+        {(save.isError || undo.isError) && (
           <Alert severity="error" sx={{ mt: 1 }}>
-            {errorMessage(save.error, t)}
+            {errorMessage(save.error ?? undo.error, t)}
           </Alert>
+        )}
+        {undoing && (
+          <Dialog open onClose={() => setUndoing(false)} fullWidth maxWidth="xs">
+            <DialogTitle>{t('presence.undoTitle', { name })}</DialogTitle>
+            <DialogContent>
+              <Typography>{t('presence.undoHint')}</Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setUndoing(false)}>{t('common.cancel')}</Button>
+              <Button variant="contained" color="error" loading={undo.isPending} onClick={() => undo.mutate()}>
+                {t('presence.undo')}
+              </Button>
+            </DialogActions>
+          </Dialog>
         )}
       </TableCell>
     </TableRow>
   )
 }
 
-// A time of the row; a planned value (not confirmed yet) is greyed
-function PresenceTime({ value, suggested, disabled, label, onChange }: { value: string; suggested: boolean; disabled: boolean; label: string; onChange: (v: string) => void }) {
+function PresenceTime({ value, disabled, label, onChange }: { value: string; disabled: boolean; label: string; onChange: (v: string) => void }) {
   return (
     <TimeField
       value={value}
       onChange={onChange}
       disabled={disabled}
-      sx={{ width: 150, '& input': { color: suggested ? tokens.inkMuted : undefined, fontSize: 15 } }}
+      sx={{ width: 150, '& input': { fontSize: 15 } }}
       slotProps={{ htmlInput: { 'aria-label': label } }}
     />
   )

@@ -129,7 +129,7 @@ export function TimeField({ value, onChange, step = 5, slotProps, onBlur, disabl
           },
           htmlInput: {
             inputMode: 'numeric',
-            placeholder: '08:00',
+            placeholder: '--:--',
             autoComplete: 'off',
             dir: 'ltr',
             ...(slotProps?.htmlInput as object),

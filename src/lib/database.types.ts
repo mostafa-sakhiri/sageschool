@@ -2003,6 +2003,7 @@ export type Database = {
           expected_end: string | null
           expected_start: string | null
           id: string
+          justified: boolean
           left_at: string | null
           member_id: string
           note: string | null
@@ -2018,6 +2019,7 @@ export type Database = {
           expected_end?: string | null
           expected_start?: string | null
           id?: string
+          justified?: boolean
           left_at?: string | null
           member_id: string
           note?: string | null
@@ -2033,6 +2035,7 @@ export type Database = {
           expected_end?: string | null
           expected_start?: string | null
           id?: string
+          justified?: boolean
           left_at?: string | null
           member_id?: string
           note?: string | null
@@ -3013,6 +3016,33 @@ export type Database = {
       set_current_academic_year: {
         Args: { p_year_id: string }
         Returns: undefined
+      }
+      staff_incidents: {
+        Args: {
+          p_from: string
+          p_grace?: number
+          p_school_id: string
+          p_to: string
+        }
+        Returns: {
+          absent: boolean
+          day: string
+          early_minutes: number
+          id: string
+          justified: boolean
+          late_minutes: number
+          member_id: string
+          note: string
+        }[]
+      }
+      student_absence_summary: {
+        Args: { p_from: string; p_school_id: string; p_to: string }
+        Returns: {
+          days: number
+          lates: number
+          student_id: string
+          unjustified_days: number
+        }[]
       }
       teacher_day: {
         Args: { p_date: string; p_teacher_member_id: string }

@@ -37,6 +37,7 @@ import { formatPhone } from '#/lib/format'
 import { WhatsAppButton } from '#/components/WhatsApp'
 import { ImportDialog } from '#/features/import/ImportZone'
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
+import { StaffIncidentCount, StaffIncidentsDialog, staffIncidentsQuery, yearPeriod } from '#/features/attendance/history'
 import { tokens } from '#/theme/theme'
 
 
@@ -55,6 +56,10 @@ function TeamPage() {
   const ctx = useSchool()
   const queryClient = useQueryClient()
   const members = useQuery(membersQuery(ctx.school.id))
+  // The year's absences, late arrivals and early departures (teachers)
+  const period = yearPeriod(ctx)
+  const incidents = useQuery({ ...staffIncidentsQuery(ctx.school.id, period.from, period.to), enabled: ctx.can('staff_presence.view') })
+  const [incidentsOf, setIncidentsOf] = useState<MemberRow | null>(null)
   const [open, setOpen] = useState(false)
   const [contact, setContact] = useState<ContactTarget | null>(null)
   const [passwordFor, setPasswordFor] = useState<PasswordLinkTarget | null>(null)
@@ -121,6 +126,7 @@ function TeamPage() {
                     <TableCell>{t('auth.email')}</TableCell>
                     <TableCell>{t('common.phone')}</TableCell>
                     <TableCell>{t('team.role')}</TableCell>
+                    {ctx.can('staff_presence.view') && <TableCell>{t('abs.column')}</TableCell>}
                     <TableCell>{t('team.active')}</TableCell>
                   </TableRow>
                 </TableHead>
@@ -179,6 +185,15 @@ function TeamPage() {
                           )}
                         </Stack>
                       </TableCell>
+                      {ctx.can('staff_presence.view') && (
+                        <TableCell>
+                          {m.role === 'teacher' ? (
+                            <StaffIncidentCount rows={(incidents.data ?? []).filter((x) => x.member_id === m.id)} onOpen={() => setIncidentsOf(m)} />
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell>
                         <Switch
                           checked={m.status === 'active'}
@@ -195,6 +210,7 @@ function TeamPage() {
           )
         }}
       </QueryState>
+      {incidentsOf && <StaffIncidentsDialog memberId={incidentsOf.id} name={incidentsOf.user?.full_name ?? ''} onClose={() => setIncidentsOf(null)} />}
       <Box sx={{ mt: 2 }}>
         <Typography variant="body2" color="text.secondary">
           {t('team.footnote')}

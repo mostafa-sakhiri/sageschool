@@ -56,6 +56,7 @@ import { AddStudentDialog } from '#/features/students/AddStudentDialog'
 import { EditStudentDialog } from '#/features/students/EditStudentDialog'
 import { ImportDialog } from '#/features/import/ImportZone'
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined'
+import { AbsenceCount, StudentAbsencesDialog, studentAbsencesQuery, yearPeriod } from '#/features/attendance/history'
 import { subjectTokens, tokens } from '#/theme/theme'
 
 export const Route = createFileRoute('/_app/students')({
@@ -74,6 +75,11 @@ function StudentsPage() {
   const { t, locale } = useI18n()
   const ctx = useSchool()
   const students = useQuery(studentsQuery(ctx.school.id))
+  // Absences of the year, for whoever sees every class's attendance
+  const seesAbsences = ctx.can('attendance.view_all')
+  const period = yearPeriod(ctx)
+  const absences = useQuery({ ...studentAbsencesQuery(ctx.school.id, period.from, period.to), enabled: seesAbsences })
+  const [absencesOf, setAbsencesOf] = useState<StudentRow | null>(null)
   const [search, setSearch] = useState('')
   const [adding, setAdding] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -186,6 +192,7 @@ function StudentsPage() {
                   <TableCell>{t('students.class')}</TableCell>
                   <TableCell>{t('students.birthDate')}</TableCell>
                   <TableCell>{t('students.parents')}</TableCell>
+                  {seesAbsences && <TableCell>{t('abs.column')}</TableCell>}
                   <TableCell>{t('students.access')}</TableCell>
                 </TableRow>
               </TableHead>
@@ -232,6 +239,11 @@ function StudentsPage() {
                           <Tag tone="warn" label={t('students.noParent')} />
                         )}
                       </TableCell>
+                      {seesAbsences && (
+                        <TableCell>
+                          <AbsenceCount summary={absences.data?.[s.id]} onOpen={() => setAbsencesOf(s)} />
+                        </TableCell>
+                      )}
                       <TableCell>{s.member_id ? <Tag tone="ok" label={t('students.hasAccess')} /> : '—'}</TableCell>
                     </TableRow>
                   )
@@ -255,9 +267,29 @@ function StudentsPage() {
         onClose={() => setOpenId(null)}
         slotProps={{ paper: { sx: { width: { xs: '100%', sm: 520 }, p: 3 } } }}
       >
-        {open && <StudentDetail student={open} onClose={() => setOpenId(null)} />}
+        {open && <StudentDetail student={open} onClose={() => setOpenId(null)} onAbsences={() => setAbsencesOf(open)} />}
       </Drawer>
+      {absencesOf && <StudentAbsencesDialog studentId={absencesOf.id} name={fullName(absencesOf)} onClose={() => setAbsencesOf(null)} />}
     </AppShell>
+  )
+}
+
+// The year's absences in the student's panel, and the way to the detail
+function AbsenceSummary({ studentId, onOpen }: { studentId: string; onOpen: () => void }) {
+  const { t } = useI18n()
+  const ctx = useSchool()
+  const period = yearPeriod(ctx)
+  const absences = useQuery(studentAbsencesQuery(ctx.school.id, period.from, period.to))
+  return (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t('abs.column')}</Typography>
+      <Box sx={{ flex: 1 }}>
+        <AbsenceCount summary={absences.data?.[studentId]} onOpen={onOpen} />
+      </Box>
+      <Button size="small" onClick={onOpen}>
+        {t('abs.seeDetail')}
+      </Button>
+    </Stack>
   )
 }
 
@@ -266,7 +298,7 @@ function ageOn(birth: string, day: string) {
   return Number(day.slice(0, 4)) - Number(birth.slice(0, 4)) - (day.slice(5) < birth.slice(5) ? 1 : 0)
 }
 
-function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () => void }) {
+function StudentDetail({ student, onClose, onAbsences }: { student: StudentRow; onClose: () => void; onAbsences: () => void }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
@@ -388,6 +420,8 @@ function StudentDetail({ student, onClose }: { student: StudentRow; onClose: () 
           ))}
         </TextField>
       )}
+
+      {ctx.can('attendance.view_all') && <AbsenceSummary studentId={student.id} onOpen={onAbsences} />}
 
       <Divider />
       <Stack direction="row" sx={{ alignItems: 'center' }}>
