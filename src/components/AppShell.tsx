@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Link, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Avatar,
   Box,
@@ -62,26 +62,43 @@ import ContactPhoneOutlined from '@mui/icons-material/ContactPhoneOutlined'
 import { QuickActions } from './QuickActions'
 import AutoAwesomeOutlined from '@mui/icons-material/AutoAwesomeOutlined'
 import { useAssistantUi } from '#/features/assistant/shell'
+import { casesQuery } from '#/features/queries'
 
 // `roles`: shown to these roles whatever their permissions (their children,
 // themselves...); `permissions`: also shown to anyone holding one of them.
-type NavItem = { to: string; key: string; icon: React.ReactNode; roles: Role[]; permissions?: Permission[]; when?: (ctx: SchoolCtx) => boolean }
+// `group`: the office's sections; other roles get a flat list. `familyKey`:
+// the label for parents and students.
+type NavGroup = 'school' | 'families' | 'welcome'
+type NavItem = {
+  to: string
+  key: string
+  familyKey?: string
+  icon: React.ReactNode
+  roles: Role[]
+  permissions?: Permission[]
+  group?: NavGroup
+  when?: (ctx: SchoolCtx) => boolean
+}
 
 const NAV: NavItem[] = [
   { to: '/', key: 'nav.dashboard', icon: <DashboardOutlined />, roles: ['admin', 'staff', 'teacher', 'parent', 'student'] },
+  // Vie scolaire
+  { to: '/students', key: 'nav.students', icon: <FaceOutlined />, roles: [], permissions: ['students.view'], group: 'school' },
   // Admins find the classes in the settings (the year's section)
-  { to: '/classes', key: 'nav.classes', icon: <ClassOutlined />, roles: [], permissions: ['classes.view_all'], when: (c) => !c.isAdmin },
-  { to: '/students', key: 'nav.students', icon: <FaceOutlined />, roles: [], permissions: ['students.view'] },
-  { to: '/preregistrations', key: 'nav.preregistrations', icon: <HowToRegOutlined />, roles: [], permissions: ['preregistrations.view'] },
-  { to: '/agenda', key: 'nav.agenda', icon: <EventNoteOutlined />, roles: [], permissions: ['agenda.view'] },
-  { to: '/events', key: 'nav.events', icon: <CakeOutlined />, roles: [], permissions: ['events.birthdays'] },
-  { to: '/timetable', key: 'nav.timetable', icon: <CalendarMonthOutlined />, roles: ['admin', 'staff', 'teacher', 'parent', 'student'] },
-  { to: '/attendance', key: 'nav.attendance', icon: <FactCheckOutlined />, roles: ['parent', 'student'], permissions: ['attendance.view_all', 'attendance.take_own'] },
-  { to: '/homework', key: 'nav.homework', icon: <MenuBookOutlined />, roles: ['parent', 'student'], permissions: ['homework.own'] },
-  { to: '/announcements', key: 'nav.announcements', icon: <CampaignOutlined />, roles: ['teacher', 'parent'], permissions: ['announcements.view_all'] },
-  { to: '/fees', key: 'nav.fees', icon: <PaymentsOutlined />, roles: ['parent'], permissions: ['fees.view'] },
-  { to: '/cases', key: 'nav.cases', icon: <ForumOutlined />, roles: ['parent'], permissions: ['messages.view'] },
+  { to: '/classes', key: 'nav.classes', icon: <ClassOutlined />, roles: [], permissions: ['classes.view_all'], group: 'school', when: (c) => !c.isAdmin },
+  { to: '/attendance', key: 'nav.attendance', icon: <FactCheckOutlined />, roles: ['parent', 'student'], permissions: ['attendance.view_all', 'attendance.take_own'], group: 'school' },
+  { to: '/timetable', key: 'nav.timetable', icon: <CalendarMonthOutlined />, roles: ['admin', 'staff', 'teacher', 'parent', 'student'], group: 'school' },
+  { to: '/homework', key: 'nav.homework', icon: <MenuBookOutlined />, roles: ['parent', 'student'], permissions: ['homework.own'], group: 'school' },
+  // Familles: what they ask, what they're told, what they pay
+  { to: '/cases', key: 'nav.cases', familyKey: 'nav.casesParent', icon: <ForumOutlined />, roles: ['parent'], permissions: ['messages.view'], group: 'families' },
+  { to: '/announcements', key: 'nav.announcements', icon: <CampaignOutlined />, roles: ['teacher', 'parent'], permissions: ['announcements.view_all'], group: 'families' },
+  { to: '/fees', key: 'nav.fees', icon: <PaymentsOutlined />, roles: ['parent'], permissions: ['fees.view'], group: 'families' },
+  // Accueil
+  { to: '/preregistrations', key: 'nav.preregistrations', icon: <HowToRegOutlined />, roles: [], permissions: ['preregistrations.view'], group: 'welcome' },
+  { to: '/agenda', key: 'nav.agenda', icon: <EventNoteOutlined />, roles: [], permissions: ['agenda.view'], group: 'welcome' },
+  { to: '/events', key: 'nav.events', icon: <CakeOutlined />, roles: [], permissions: ['events.birthdays'], group: 'welcome' },
 ]
+const GROUPS: NavGroup[] = ['welcome', 'school', 'families']
 
 // The settings' own nav (admin): what belongs to the school, then what belongs
 // to the selected school year. `tab` = a section of /setup.
@@ -332,6 +349,24 @@ function Sidebar({ onNavigate, compact, onFold }: { onNavigate: () => void; comp
   const ctx = useSchool()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const items = NAV.filter((n) => (n.roles.includes(ctx.role) || !!n.permissions?.some((p) => ctx.can(p))) && (!n.when || n.when(ctx)))
+  // The office gets sections; a teacher or a family, a short flat list
+  const sectioned = ctx.isOffice && new Set(items.map((n) => n.group).filter(Boolean)).size > 1
+  const family = ctx.role === 'parent' || ctx.role === 'student'
+  // Requests waiting for an answer, next to "Demandes des parents"
+  const cases = useQuery({ ...casesQuery(ctx.school.id), enabled: ctx.can('messages.view') && !family })
+  const waiting = (cases.data ?? []).filter((c) => c.status === 'open').length
+  const link = (n: NavItem) => (
+    <NavLink
+      key={n.to}
+      to={n.to}
+      label={t(family && n.familyKey ? n.familyKey : n.key)}
+      icon={n.icon}
+      badge={n.to === '/cases' && !family ? waiting : 0}
+      on={n.to === '/' ? pathname === '/' : pathname.startsWith(n.to)}
+      compact={compact}
+      onClick={onNavigate}
+    />
+  )
   const settings = isSettingsPath(pathname, ctx)
   // Chevron towards where the sidebar would grow or shrink (mirrored in RTL)
   const unfoldIcon = (compact ? dir !== 'rtl' : dir === 'rtl') ? <ChevronRightOutlined fontSize="small" /> : <ChevronLeftOutlined fontSize="small" />
@@ -367,18 +402,19 @@ function Sidebar({ onNavigate, compact, onFold }: { onNavigate: () => void; comp
           <QuickActions onDone={onNavigate} compact={compact} />
           <Stack spacing={0.25}>
             <AssistantNavItem onDone={onNavigate} compact={compact} />
-            {items.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                label={t(n.key)}
-                icon={n.icon}
-                on={n.to === '/' ? pathname === '/' : pathname.startsWith(n.to)}
-                compact={compact}
-                onClick={onNavigate}
-              />
-            ))}
+            {(sectioned ? items.filter((n) => !n.group) : items).map(link)}
           </Stack>
+          {sectioned &&
+            GROUPS.map((g) => {
+              const inGroup = items.filter((n) => n.group === g)
+              if (!inGroup.length) return null
+              return (
+                <Box key={g}>
+                  <NavHeading compact={compact}>{t(`nav.group.${g}`)}</NavHeading>
+                  <Stack spacing={0.25}>{inGroup.map(link)}</Stack>
+                </Box>
+              )
+            })}
         </>
       )}
 
@@ -404,6 +440,7 @@ function NavLink({
   search,
   label,
   icon,
+  badge = 0,
   on,
   compact,
   onClick,
@@ -412,6 +449,8 @@ function NavLink({
   search?: Record<string, string>
   label: string
   icon: React.ReactNode
+  // a count waiting there (a dot when the sidebar is folded)
+  badge?: number
   on: boolean
   compact: boolean
   onClick: () => void
@@ -427,8 +466,21 @@ function NavLink({
         aria-label={label}
         sx={navItemSx(on)}
       >
-        {icon}
+        <Box component="span" sx={{ position: 'relative', display: 'inline-flex' }}>
+          {icon}
+          {compact && badge > 0 && (
+            <Box component="span" sx={{ position: 'absolute', top: -2, insetInlineEnd: -3, width: 7, height: 7, borderRadius: '50%', bgcolor: tokens.dangerInk }} />
+          )}
+        </Box>
         <NavLabel hidden={compact}>{label}</NavLabel>
+        {!compact && badge > 0 && (
+          <Box
+            component="span"
+            sx={{ marginInlineStart: 'auto', minWidth: 20, height: 18, px: 0.6, borderRadius: '9px', bgcolor: tokens.dangerSoft, color: tokens.dangerInk, fontSize: 11.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            {badge}
+          </Box>
+        )}
       </Box>
     </Tooltip>
   )
