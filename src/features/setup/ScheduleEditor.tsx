@@ -8,6 +8,8 @@ import {
   MenuItem,
   Paper,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -18,6 +20,7 @@ import AddOutlined from '@mui/icons-material/AddOutlined'
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined'
 import { useI18n } from '#/i18n/i18n'
 import { formatMinutes } from '#/features/structure/api'
+import { TimeField } from '#/components/TimeField'
 import { tokens } from '#/theme/theme'
 import {
   PAUSE_KINDS,
@@ -36,16 +39,45 @@ export function pauseLabel(p: Pause, t: (k: string) => string) {
   return p.label?.trim() || t(`pause.${p.kind}`)
 }
 
-// One card per horaire (usually one per cycle). Controlled: the caller owns
-// the list and decides when to save it.
+// One horaire per cycle. With several, a tab per cycle (with its weekly
+// total) and one card at a time. Controlled: the caller owns the list and
+// decides when to save it.
 export function ScheduleEditor({ value, onChange }: { value: Horaire[]; onChange: (v: Horaire[]) => void }) {
+  const { t, locale } = useI18n()
+  const [openId, setOpenId] = useState<string | null>(null)
   const set = (i: number, h: Horaire) => onChange(value.map((x, j) => (j === i ? h : x)))
+  const i = Math.max(0, value.findIndex((h) => h.id === openId))
+  const h = value[i]
+  if (!h) return null
+  const card = <HoraireCard key={h.id} h={h} others={value.filter((_, j) => j !== i)} onChange={(x) => set(i, x)} />
+  if (value.length === 1) return card
   return (
-    <Stack spacing={2}>
-      {value.map((h, i) => (
-        <HoraireCard key={h.id} h={h} others={value.filter((_, j) => j !== i)} onChange={(x) => set(i, x)} />
-      ))}
-    </Stack>
+    <Box>
+      <Tabs
+        value={h.id}
+        onChange={(_, id) => setOpenId(id)}
+        variant="scrollable"
+        allowScrollButtonsMobile
+        sx={{ mb: 2, borderBottom: `1px solid ${tokens.line}` }}
+      >
+        {value.map((x) => (
+          <Tab
+            key={x.id}
+            value={x.id}
+            sx={{ alignItems: 'flex-start', textAlign: 'start' }}
+            label={
+              <Box>
+                <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{x.name || t('sched.allLevels')}</Typography>
+                <Typography sx={{ fontSize: 12, color: tokens.inkMuted }}>
+                  {x.days.length ? t('sched.perWeek', { week: formatMinutes(weeklyTeachable(x), locale) }) : t('sched.noDays')}
+                </Typography>
+              </Box>
+            }
+          />
+        ))}
+      </Tabs>
+      {card}
+    </Box>
   )
 }
 
@@ -197,15 +229,7 @@ function DayEditor({ day, onChange }: { day: DaySchedule; onChange: (d: DaySched
   const teach = teachableMinutes(day)
   const bad = day.pauses.some((p) => p.end <= p.start || p.start < day.start || p.end > day.end)
   const time = (label: string, v: string, set: (v: string) => void) => (
-    <TextField
-      type="time"
-      size="small"
-      label={label}
-      value={v}
-      onChange={(e) => set(e.target.value)}
-      slotProps={{ inputLabel: { shrink: true }, htmlInput: { step: 300 } }}
-      sx={{ width: 130 }}
-    />
+    <TimeField size="small" label={label} value={v} onChange={set} slotProps={{ inputLabel: { shrink: true } }} sx={{ width: 140 }} />
   )
   return (
     <Stack spacing={1.5}>

@@ -4,13 +4,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Box, Button, Paper, Stack, Step, StepLabel, Stepper, TextField, Typography } from '@mui/material'
 import { OnboardingShell } from '#/components/OnboardingShell'
 import { AppShell } from '#/components/AppShell'
-import { PageIntro, Card, Tag } from '#/components/ui'
+import { PageIntro, Card } from '#/components/ui'
 import { EmptyState, Loading } from '#/components/states'
 import { SchoolContext } from '#/lib/session'
 import { useI18n } from '#/i18n/i18n'
 import { CreateSchool, StepActions } from '#/features/setup/CreateSchool'
-import { ScheduleEditor, pauseLabel } from '#/features/setup/ScheduleEditor'
-import { dayOf, presetHoraire, readHoraires, weeklyTeachable, type Horaire } from '#/features/setup/schedule'
+import { ScheduleEditor } from '#/features/setup/ScheduleEditor'
+import { presetHoraire, readHoraires, weeklyTeachable, type Horaire } from '#/features/setup/schedule'
 import { supabase } from '#/lib/supabase/client'
 import type { Json } from '#/lib/database.types'
 import { errorMessage, must } from '#/lib/errors'
@@ -18,8 +18,9 @@ import { YearForm, YearSection } from '#/features/setup/YearSection'
 import { HoursSection } from '#/features/setup/HoursSection'
 import { RoomsSection } from '#/features/setup/RoomsSection'
 import { RolesSection } from '#/features/setup/AccessSection'
+import { StructureSection } from '#/features/setup/StructureSection'
 import { ImportPanel } from '#/features/import/ImportZone'
-import { formatMinutes, nodeName, nodesQuery } from '#/features/structure/api'
+import { nodeName, nodesQuery } from '#/features/structure/api'
 import { tokens } from '#/theme/theme'
 
 type Search = { step?: number; tab?: string; new?: boolean; role?: string }
@@ -173,7 +174,7 @@ function Settings() {
       {current === 'school' && <SchoolInfo />}
       {current === 'roles' && <RolesSection roleId={search.role} />}
       {current === 'schedule' && <ScheduleSettings />}
-      {current === 'structure' && <TreeSection schoolId={ctx.school.id} />}
+      {current === 'structure' && <StructureSection />}
       {current === 'years' && <YearSection schoolId={ctx.school.id} />}
       {current === 'hours' &&
         (ctx.year ? (
@@ -187,42 +188,9 @@ function Settings() {
 }
 
 function SchoolInfo() {
-  const { t, locale } = useI18n()
-  const ctx = useContext(SchoolContext)!
-  const navigate = useNavigate()
-  const horaires = readHoraires(ctx.school.settings)
-  const dayNames = t('setup.dayNames').split(',')
   return (
-    <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
+    <Box sx={{ maxWidth: 640 }}>
       <SchoolIdentity />
-      <Card>
-        <Stack direction="row" sx={{ alignItems: 'center', mb: 1.5 }}>
-          <Typography variant="h5" sx={{ flex: 1 }}>
-            {t('setup.hoursTitle')}
-          </Typography>
-          <Button size="small" onClick={() => navigate({ to: '/setup', search: { tab: 'schedule' } })}>
-            {t('common.edit')}
-          </Button>
-        </Stack>
-        {horaires.length === 0 && <Typography color="text.secondary">{t('sched.none')}</Typography>}
-        {horaires.map((h) => {
-          const base = h.base
-          const special = Object.keys(h.overrides).filter((d) => h.days.includes(d))
-          return (
-            <Box key={h.id} sx={{ mb: 1.5 }}>
-              {horaires.length > 1 && <Typography sx={{ fontWeight: 600, mb: 0.5 }}>{h.name || t('sched.allLevels')}</Typography>}
-              <Info label={t('setup.days')} value={h.days.map((d) => dayNames[Number(d) - 1]).join(', ')} />
-              <Info label={t('setup.period.day')} value={`${base.start} → ${base.end}`} />
-              <Info label={t('sched.pauses')} value={base.pauses.map((p) => `${pauseLabel(p, t)} ${p.start}–${p.end}`).join(' · ') || '—'} />
-              {special.map((d) => {
-                const day = dayOf(h, d)!
-                return <Info key={d} label={dayNames[Number(d) - 1]} value={`${day.start} → ${day.end}`} />
-              })}
-              <Info label={t('settings.teachablePerWeek')} value={formatMinutes(weeklyTeachable(h), locale)} />
-            </Box>
-          )
-        })}
-      </Card>
     </Box>
   )
 }
@@ -354,41 +322,5 @@ function ScheduleSettings() {
         }}
       />
     </Stack>
-  )
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <Stack direction="row" spacing={2} sx={{ py: 0.75, borderBottom: `1px solid ${tokens.lineSoft}` }}>
-      <Typography sx={{ width: 180, color: tokens.inkMuted, fontSize: 13.5 }}>{label}</Typography>
-      <Typography sx={{ fontSize: 14, fontWeight: 500 }}>{value}</Typography>
-    </Stack>
-  )
-}
-
-function TreeSection({ schoolId }: { schoolId: string }) {
-  const { t, locale } = useI18n()
-  const nodes = useQuery(nodesQuery(schoolId))
-  if (nodes.isPending) return <Loading rows={6} />
-  const all = nodes.data ?? []
-  return (
-    <Card>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-        {t('settings.treeHint')}
-      </Typography>
-      {all.map((n) => (
-        <Stack
-          key={n.id}
-          direction="row"
-          spacing={1}
-          sx={{ alignItems: 'center', py: 0.5, pl: (n.path.length - 1) * 3 }}
-        >
-          <Typography sx={{ fontWeight: n.kind === 'cycle' ? 700 : 500, fontSize: n.kind === 'cycle' ? 15 : 14 }}>
-            {nodeName(n, locale)}
-          </Typography>
-          <Tag label={t(`node.${n.kind}`)} />
-        </Stack>
-      ))}
-    </Card>
   )
 }

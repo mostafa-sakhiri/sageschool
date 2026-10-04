@@ -43,6 +43,7 @@ import { Planner, Range, type NewItem, type Place, type PlannerSlot, type Verdic
 import { useSchoolDays } from './RealWeek'
 import { dayOf, firstFree, fromMin, slotIssues, weeklyTeachable } from '#/features/setup/schedule'
 import { pauseLabel } from '#/features/setup/ScheduleEditor'
+import { TimeField } from '#/components/TimeField'
 import { tokens } from '#/theme/theme'
 import { placement, toPSlot, type Env } from './plan'
 import { describeIssue } from './describe'
@@ -763,21 +764,19 @@ function SlotDialog({
                   </MenuItem>
                 ))}
               </TextField>
-              <TextField
-                type="time"
+              <TimeField
                 label={t('setup.start')}
                 value={startsAt}
-                onChange={(e) => setStartsAt(e.target.value)}
-                slotProps={{ inputLabel: { shrink: true }, htmlInput: { step: 300 } }}
+                onChange={setStartsAt}
+                slotProps={{ inputLabel: { shrink: true } }}
                 fullWidth
                 required
               />
-              <TextField
-                type="time"
+              <TimeField
                 label={t('setup.end')}
                 value={endsAt}
-                onChange={(e) => setEndsAt(e.target.value)}
-                slotProps={{ inputLabel: { shrink: true }, htmlInput: { step: 300 } }}
+                onChange={setEndsAt}
+                slotProps={{ inputLabel: { shrink: true } }}
                 fullWidth
                 required
               />

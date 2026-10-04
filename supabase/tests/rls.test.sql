@@ -16,7 +16,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(105);
+SELECT plan(108);
 
 -- Impersonate a user: JWT claims + the authenticated role (RESET ROLE first).
 CREATE FUNCTION pg_temp.login(p_email text) RETURNS void LANGUAGE plpgsql AS $$
@@ -539,6 +539,19 @@ SELECT throws_ok($$INSERT INTO attendance_records (school_id, class_id, student_
 SELECT throws_ok($$INSERT INTO homework (school_id, class_id, subject_id, author_member_id, title, body)
                    VALUES ('5c000000-0000-0000-0000-00000000000a', 'd1000000-0000-0000-0000-000000000001', '78000000-0000-0000-0000-00000000000a', 'b1000000-0000-0000-0000-000000000004', 'X', 'Y')$$,
   '42501', NULL, 'professeur principal: homework only in their own classes');
+RESET ROLE;
+
+-- Buildings and floors (migration 20261004090000)
+SELECT pg_temp.login('staff.a@test.ma');
+SELECT throws_ok($$INSERT INTO room_areas (school_id, kind, name) VALUES ('5c000000-0000-0000-0000-00000000000a', 'building', 'Bâtiment A')$$,
+  '42501', NULL, 'rooms: only the admin adds a building');
+RESET ROLE;
+SELECT pg_temp.login('admin.a@test.ma');
+SELECT lives_ok($$INSERT INTO room_areas (id, school_id, kind, name) VALUES ('7b000000-0000-0000-0000-000000000001', '5c000000-0000-0000-0000-00000000000a', 'building', 'Bâtiment A');
+                  INSERT INTO room_areas (id, school_id, parent_id, kind, name) VALUES ('7b000000-0000-0000-0000-000000000002', '5c000000-0000-0000-0000-00000000000a', '7b000000-0000-0000-0000-000000000001', 'floor', 'Rez-de-chaussée')$$,
+  'rooms: the admin adds a building and a floor in it');
+SELECT throws_ok($$INSERT INTO room_areas (school_id, parent_id, kind, name) VALUES ('5c000000-0000-0000-0000-00000000000a', '7b000000-0000-0000-0000-000000000002', 'floor', 'Mezzanine')$$,
+  '23514', NULL, 'rooms: a floor goes in a building, not in a floor');
 RESET ROLE;
 
 SELECT * FROM finish();

@@ -20,6 +20,7 @@ export const keys = {
   nodes: (s: string) => ['school', s, 'nodes'] as const,
   subjects: (s: string) => ['school', s, 'subjects'] as const,
   rooms: (s: string) => ['school', s, 'rooms'] as const,
+  roomAreas: (s: string) => ['school', s, 'room-areas'] as const,
   years: (s: string) => ['school', s, 'years'] as const,
   hours: (s: string, y: string) => ['school', s, 'hours', y] as const,
   resolved: (s: string, y: string) => ['school', s, 'resolved-hours', y] as const,
@@ -49,7 +50,18 @@ export const roomsQuery = (schoolId: string) =>
   queryOptions({
     queryKey: keys.rooms(schoolId),
     queryFn: async () =>
-      must(await supabase.from('rooms').select('id, name, capacity').eq('school_id', schoolId).order('name')),
+      must(await supabase.from('rooms').select('id, name, capacity, area_id').eq('school_id', schoolId).order('name')),
+  })
+
+// Buildings and floors the rooms are grouped in (optional)
+export type RoomArea = { id: string; parent_id: string | null; kind: 'building' | 'floor'; name: string; position: number }
+export const roomAreasQuery = (schoolId: string) =>
+  queryOptions({
+    queryKey: keys.roomAreas(schoolId),
+    queryFn: async () =>
+      must(
+        await supabase.from('room_areas').select('id, parent_id, kind, name, position').eq('school_id', schoolId).order('position').order('created_at'),
+      ) as RoomArea[],
   })
 
 // Years: shared with the session layer (same cache entry).

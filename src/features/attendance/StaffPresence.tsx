@@ -3,7 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   Avatar,
+  Box,
   Button,
+  ButtonBase,
+  FormControlLabel,
+  Switch,
   Checkbox,
   Dialog,
   DialogActions,
@@ -33,6 +37,8 @@ import { errorMessage, must } from '#/lib/errors'
 import { formatPhone, hhmm, nowTime, todayIso, toMinutes } from '#/lib/format'
 import { membersQuery, type MemberRow } from '#/features/team/api'
 import type { TeacherSession } from '#/features/timetable/api'
+import { dayOf, readHoraires } from '#/features/setup/schedule'
+import { TimeField } from '#/components/TimeField'
 import { tokens } from '#/theme/theme'
 import { WhatsAppButton } from '#/components/WhatsApp'
 
@@ -72,7 +78,20 @@ function earlyBy(p: Pick<Presence, 'left_at' | 'expected_end'>) {
 }
 
 type Hours = { member_id: string; weekday: number; starts_at: string; ends_at: string }
-type Expected = { start: string | null; end: string | null; count: number; usual: boolean }
+// Where the expected hours come from: the person's usual hours, the school's
+// opening (assistants), or the timetable (first and last session)
+type Source = 'usual' | 'school' | 'timetable'
+type Expected = { start: string | null; end: string | null; count: number; source: Source }
+
+// The school's opening and closing on a weekday: earliest opening, latest
+// closing over the cycles open that day
+function schoolHours(settings: unknown, weekday: number) {
+  const days = readHoraires(settings)
+    .map((h) => dayOf(h, weekday))
+    .filter((d): d is NonNullable<typeof d> => !!d)
+  if (!days.length) return null
+  return { start: days.map((d) => d.start).sort()[0], end: days.map((d) => d.end).sort().at(-1)! }
+}
 
 // ISO weekday of a yyyy-mm-dd date (1 = Monday)
 function isoWeekday(day: string) {
@@ -119,13 +138,19 @@ export function StaffPresencePanel() {
       return out
     },
   })
-  // Usual hours for this weekday win over the timetable
+  // Usual hours for this weekday first; else an assistant follows the
+  // school's opening, a teacher the timetable
   const weekday = isoWeekday(day)
-  const expectedOf = (memberId: string): Expected | undefined => {
-    const h = hours.data?.find((x) => x.member_id === memberId && x.weekday === weekday)
-    if (h) return { start: hhmm(h.starts_at), end: hhmm(h.ends_at), count: timetable.data?.[memberId]?.count ?? 0, usual: true }
-    const tt = timetable.data?.[memberId]
-    return tt && { ...tt, usual: false }
+  const expectedOf = (m: MemberRow): Expected | undefined => {
+    const count = timetable.data?.[m.id]?.count ?? 0
+    const h = hours.data?.find((x) => x.member_id === m.id && x.weekday === weekday)
+    if (h) return { start: hhmm(h.starts_at), end: hhmm(h.ends_at), count, source: 'usual' }
+    if (m.is_assistant) {
+      const open = schoolHours(ctx.school.settings, weekday)
+      return { start: open?.start ?? null, end: open?.end ?? null, count, source: 'school' }
+    }
+    const tt = timetable.data?.[m.id]
+    return tt && { ...tt, source: 'timetable' }
   }
   const monthStart = `${day.slice(0, 7)}-01`
   const presence = useQuery({
@@ -166,7 +191,7 @@ export function StaffPresencePanel() {
                 <TableCell>{t('presence.arrival')}</TableCell>
                 <TableCell>{t('presence.departure')}</TableCell>
                 <TableCell>{t('presence.absent')}</TableCell>
-                <TableCell>{t('common.status')}</TableCell>
+                <TableCell>{t('presence.notes')}</TableCell>
                 <TableCell>{t('presence.month')}</TableCell>
                 <TableCell />
               </TableRow>
@@ -180,7 +205,7 @@ export function StaffPresencePanel() {
                   phone={m.user?.phone ?? null}
                   day={day}
                   isAssistant={m.is_assistant}
-                  expected={expectedOf(m.id)}
+                  expected={expectedOf(m)}
                   onEditHours={() => setEditingHours(m)}
                   row={(presence.data ?? []).find((p) => p.member_id === m.id && p.day === day)}
                   monthIssues={latesThisMonth(m.id)}
@@ -191,7 +216,7 @@ export function StaffPresencePanel() {
           </Table>
         </Paper>
       )}
-      {editingHours && <HoursDialog member={editingHours} hours={(hours.data ?? []).filter((h) => h.member_id === editingHours.id)} onClose={() => setEditingHours(null)} />}
+      {editingHours && <HoursDialog member={editingHours} day={day} hours={(hours.data ?? []).filter((h) => h.member_id === editingHours.id)} onClose={() => setEditingHours(null)} />}
     </>
   )
 }
@@ -222,16 +247,25 @@ function PresenceRow({
   const { t } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
-  const [arrived, setArrived] = useState(hhmm(row?.arrived_at))
-  const [left, setLeft] = useState(hhmm(row?.left_at))
+  // Nothing recorded yet: arrival and departure start from the expected
+  // hours (greyed) until the secrétariat confirms or changes them
+  const planned = !row
+  const initialArrived = row ? hhmm(row.arrived_at) : (expected?.start ?? '')
+  const initialLeft = row ? hhmm(row.left_at) : (expected?.end ?? '')
+  const [arrived, setArrived] = useState(initialArrived)
+  const [left, setLeft] = useState(initialLeft)
   const [absent, setAbsent] = useState(row?.absent ?? false)
   const [note, setNote] = useState(row?.note ?? '')
+  const [touched, setTouched] = useState({ arrived: false, left: false })
   useEffect(() => {
-    setArrived(hhmm(row?.arrived_at))
-    setLeft(hhmm(row?.left_at))
+    setArrived(initialArrived)
+    setLeft(initialLeft)
     setAbsent(row?.absent ?? false)
     setNote(row?.note ?? '')
-  }, [row])
+    setTouched({ arrived: false, left: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- expected loads after the row
+  }, [row, expected?.start, expected?.end])
+  const suggested = (k: 'arrived' | 'left') => planned && !touched[k] && !absent
 
   const save = useMutation({
     mutationFn: async (patch?: { arrived?: string; left?: string }) =>
@@ -263,7 +297,11 @@ function PresenceRow({
     const e = toMinutes(expected?.end)
     return l != null && e != null && l - e > GRACE ? l - e : 0
   })()
-  const verdicts: Verdict[] = absent
+  const verdicts: Verdict[] = planned && !touched.arrived && !touched.left && !absent
+    ? expected?.start
+      ? [{ tone: 'neutral', label: t('presence.toConfirm') }]
+      : []
+    : absent
     ? [{ tone: 'danger', label: t('presence.absent') }]
     : [
         ...(late ? [{ tone: 'danger' as Tone, label: t('presence.late', { n: late }) }] : []),
@@ -271,7 +309,9 @@ function PresenceRow({
         ...(extra ? [{ tone: 'info' as Tone, label: t('presence.stayed', { n: extra }) }] : []),
         ...(arrived && !late && !early ? [{ tone: 'ok' as Tone, label: t('presence.onTime') }] : []),
       ]
+  // A planned row can be confirmed as it is
   const dirty =
+    (planned && (!!arrived || absent)) ||
     arrived !== hhmm(row?.arrived_at) || left !== hhmm(row?.left_at) || absent !== (row?.absent ?? false) || note !== (row?.note ?? '')
   const isToday = day === todayIso()
   const redBg = verdicts.some((v) => v.tone === 'danger')
@@ -297,24 +337,33 @@ function PresenceRow({
       </TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap', color: tokens.inkSoft }}>
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-          {expected?.start ? (
-            <Tooltip title={expected.usual ? t('presence.usualHours') : t('presence.fromTimetable')}>
-              <span>{`${expected.start} → ${expected.end}`}</span>
-            </Tooltip>
-          ) : (
-            <Typography sx={{ fontSize: 13, color: tokens.inkMuted }}>{t('presence.noClass')}</Typography>
-          )}
           <Tooltip title={t('presence.editHours')}>
-            <IconButton size="small" aria-label={`${t('presence.editHours')} — ${name}`} onClick={onEditHours} sx={{ color: expected?.usual ? tokens.accentDark : undefined }}>
-              <ScheduleOutlined sx={{ fontSize: 17 }} />
-            </IconButton>
+            <ButtonBase
+              onClick={onEditHours}
+              aria-label={`${t('presence.editHours')} — ${name}`}
+              sx={{ display: 'block', textAlign: 'start', px: 0.75, py: 0.25, borderRadius: '6px', '&:hover': { bgcolor: tokens.fill } }}
+            >
+              <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                <ScheduleOutlined sx={{ fontSize: 15, color: expected?.source === 'usual' ? tokens.accent : tokens.inkMuted }} />
+                <Typography sx={{ fontSize: 13.5, fontWeight: 500 }}>{expected?.start ? `${expected.start} → ${expected.end}` : t('presence.noClass')}</Typography>
+              </Stack>
+              {expected?.start && (
+                <Typography sx={{ fontSize: 11.5, color: tokens.inkMuted }}>{t(`presence.source.${expected.source}`)}</Typography>
+              )}
+            </ButtonBase>
           </Tooltip>
         </Stack>
       </TableCell>
       <TableCell>
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-          <TextField type="time" value={arrived} onChange={(e) => setArrived(e.target.value)} disabled={absent} sx={{ width: 120 }} slotProps={{ htmlInput: { 'aria-label': `${t('presence.arrival')} — ${name}` } }} />
-          {isToday && !arrived && !absent && (
+          <PresenceTime
+            value={arrived}
+            suggested={suggested('arrived')}
+            disabled={absent}
+            label={`${t('presence.arrival')} — ${name}`}
+            onChange={(v) => (setArrived(v), setTouched((x) => ({ ...x, arrived: true })))}
+          />
+          {isToday && !row?.arrived_at && !absent && (
             <Tooltip title={t('presence.arrivedNow')}>
               <IconButton
                 size="small"
@@ -322,7 +371,10 @@ function PresenceRow({
                 onClick={() => {
                   const n = nowTime()
                   setArrived(n)
-                  save.mutate({ arrived: n })
+                  setTouched((x) => ({ ...x, arrived: true }))
+                  // the departure isn't known yet
+                  if (planned) setLeft('')
+                  save.mutate({ arrived: n, left: planned ? '' : undefined })
                 }}
               >
                 <LoginOutlined fontSize="small" />
@@ -333,8 +385,14 @@ function PresenceRow({
       </TableCell>
       <TableCell>
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-          <TextField type="time" value={left} onChange={(e) => setLeft(e.target.value)} disabled={absent} sx={{ width: 120 }} slotProps={{ htmlInput: { 'aria-label': `${t('presence.departure')} — ${name}` } }} />
-          {isToday && arrived && !left && !absent && (
+          <PresenceTime
+            value={left}
+            suggested={suggested('left')}
+            disabled={absent}
+            label={`${t('presence.departure')} — ${name}`}
+            onChange={(v) => (setLeft(v), setTouched((x) => ({ ...x, left: true })))}
+          />
+          {isToday && !row?.left_at && !absent && (
             <Tooltip title={t('presence.leftNow')}>
               <IconButton
                 size="small"
@@ -342,6 +400,7 @@ function PresenceRow({
                 onClick={() => {
                   const n = nowTime()
                   setLeft(n)
+                  setTouched((x) => ({ ...x, left: true }))
                   save.mutate({ left: n })
                 }}
               >
@@ -363,7 +422,7 @@ function PresenceRow({
         <TextField
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder={t('presence.note')}
+          placeholder={t('presence.notePlaceholder')}
           variant="standard"
           fullWidth
           sx={{ mt: 0.5, minWidth: 160 }}
@@ -375,7 +434,7 @@ function PresenceRow({
       </TableCell>
       <TableCell align="right">
         <Button size="small" variant={dirty ? 'contained' : 'text'} disabled={!dirty} loading={save.isPending} onClick={() => save.mutate(undefined)}>
-          {t('common.save')}
+          {planned ? t('presence.confirm') : t('common.save')}
         </Button>
         {save.isError && (
           <Alert severity="error" sx={{ mt: 1 }}>
@@ -387,39 +446,89 @@ function PresenceRow({
   )
 }
 
+// A time of the row; a planned value (not confirmed yet) is greyed
+function PresenceTime({ value, suggested, disabled, label, onChange }: { value: string; suggested: boolean; disabled: boolean; label: string; onChange: (v: string) => void }) {
+  return (
+    <TimeField
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      sx={{ width: 150, '& input': { color: suggested ? tokens.inkMuted : undefined, fontSize: 15 } }}
+      slotProps={{ htmlInput: { 'aria-label': label } }}
+    />
+  )
+}
+
 const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7]
 
-// A teacher's usual arrival and departure, per weekday. An empty day follows
-// the timetable (first and last session).
-function HoursDialog({ member, hours, onClose }: { member: MemberRow; hours: Hours[]; onClose: () => void }) {
+// A teacher's usual arrival and departure, school day by school day. A day
+// without fixed hours follows the timetable (first and last session), shown
+// beside it so the choice is informed.
+function HoursDialog({ member, hours, day, onClose }: { member: MemberRow; hours: Hours[]; day: string; onClose: () => void }) {
   const { t, locale } = useI18n()
   const ctx = useSchool()
   const queryClient = useQueryClient()
-  const [rows, setRows] = useState<Record<number, { start: string; end: string }>>(() =>
-    Object.fromEntries(WEEKDAYS.map((d) => {
-      const h = hours.find((x) => x.weekday === d)
-      return [d, { start: hhmm(h?.starts_at), end: hhmm(h?.ends_at) }]
-    })),
+  // School days (the horaires), plus any day that already has hours
+  const schoolDays = new Set(readHoraires(ctx.school.settings).flatMap((h) => h.days.map(Number)))
+  const days = WEEKDAYS.filter((d) => schoolDays.has(d) || hours.some((h) => h.weekday === d) || schoolDays.size === 0)
+  // What the timetable gives each weekday, over the week of the chosen date
+  const week = useQuery({
+    queryKey: ['school', ctx.school.id, 'teacher-week', member.id, day],
+    queryFn: async () => {
+      const monday = new Date(`${day}T12:00:00`)
+      monday.setDate(monday.getDate() - (isoWeekday(day) - 1))
+      const out: Record<number, { start: string; end: string } | null> = {}
+      await Promise.all(
+        days.map(async (d) => {
+          const date = new Date(monday)
+          date.setDate(monday.getDate() + d - 1)
+          const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+          const sessions = (must(await supabase.rpc('teacher_day', { p_teacher_member_id: member.id, p_date: iso })) as TeacherSession[]).filter(
+            (x) => x.starts_at && x.status !== 'cancelled',
+          )
+          const starts = sessions.map((x) => hhmm(x.starts_at)).sort()
+          const ends = sessions.map((x) => hhmm(x.ends_at)).sort()
+          out[d] = member.is_assistant
+            ? schoolHours(ctx.school.settings, d)
+            : starts.length
+              ? { start: starts[0], end: ends[ends.length - 1] }
+              : null
+        }),
+      )
+      return out
+    },
+  })
+  const [rows, setRows] = useState<Record<number, { on: boolean; start: string; end: string }>>(() =>
+    Object.fromEntries(
+      WEEKDAYS.map((d) => {
+        const h = hours.find((x) => x.weekday === d)
+        return [d, { on: !!h, start: hhmm(h?.starts_at), end: hhmm(h?.ends_at) }]
+      }),
+    ),
   )
   // 2024-01-01 was a Monday
   const dayName = (d: number) => new Date(2024, 0, d).toLocaleDateString(locale, { weekday: 'long' })
-  const set = (d: number, k: 'start' | 'end', v: string) => setRows((r) => ({ ...r, [d]: { ...r[d], [k]: v } }))
-  const invalid = WEEKDAYS.filter((d) => {
-    const { start, end } = rows[d]
-    return (!!start !== !!end) || (start && end && end <= start)
-  })
+  const set = (d: number, patch: Partial<{ on: boolean; start: string; end: string }>) => setRows((r) => ({ ...r, [d]: { ...r[d], ...patch } }))
+  const turnOn = (d: number) => {
+    // Start from the timetable of that day, else from another day's hours
+    const from = week.data?.[d] ?? days.map((x) => rows[x]).find((r) => r.on && r.start && r.end) ?? { start: '08:00', end: '16:00' }
+    set(d, { on: true, start: rows[d].start || from.start, end: rows[d].end || from.end })
+  }
+  const applyToAll = (d: number) =>
+    setRows((r) => ({ ...r, ...Object.fromEntries(days.map((x) => [x, { on: true, start: r[d].start, end: r[d].end }])) }))
+  const invalid = days.filter((d) => rows[d].on && (!rows[d].start || !rows[d].end || rows[d].end <= rows[d].start))
   const save = useMutation({
     mutationFn: async () => {
-      const filled = WEEKDAYS.filter((d) => rows[d].start && rows[d].end)
-      const cleared = WEEKDAYS.filter((d) => !rows[d].start && !rows[d].end)
-      if (filled.length)
+      const fixed = WEEKDAYS.filter((d) => rows[d].on)
+      const free = WEEKDAYS.filter((d) => !rows[d].on)
+      if (fixed.length)
         must(
           await supabase.from('staff_hours').upsert(
-            filled.map((d) => ({ school_id: ctx.school.id, member_id: member.id, weekday: d, starts_at: rows[d].start, ends_at: rows[d].end })),
+            fixed.map((d) => ({ school_id: ctx.school.id, member_id: member.id, weekday: d, starts_at: rows[d].start, ends_at: rows[d].end })),
             { onConflict: 'member_id,weekday' },
           ),
         )
-      if (cleared.length) must(await supabase.from('staff_hours').delete().eq('member_id', member.id).in('weekday', cleared))
+      if (free.length) must(await supabase.from('staff_hours').delete().eq('member_id', member.id).in('weekday', free))
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'staff-hours'] })
@@ -427,21 +536,63 @@ function HoursDialog({ member, hours, onClose }: { member: MemberRow; hours: Hou
     },
   })
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
+    <Dialog open onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>{t('presence.hoursTitle', { name: member.user?.full_name ?? '' })}</DialogTitle>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           {t('presence.hoursHint')}
         </Typography>
-        <Stack spacing={1.25}>
-          {WEEKDAYS.map((d) => (
-            <Stack key={d} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <Typography sx={{ width: 90, textTransform: 'capitalize', fontSize: 14 }}>{dayName(d)}</Typography>
-              <TextField type="time" size="small" value={rows[d].start} onChange={(e) => set(d, 'start', e.target.value)} error={invalid.includes(d)} slotProps={{ htmlInput: { 'aria-label': `${dayName(d)} — ${t('presence.arrival')}` } }} />
-              <Typography color="text.secondary">→</Typography>
-              <TextField type="time" size="small" value={rows[d].end} onChange={(e) => set(d, 'end', e.target.value)} error={invalid.includes(d)} slotProps={{ htmlInput: { 'aria-label': `${dayName(d)} — ${t('presence.departure')}` } }} />
-            </Stack>
-          ))}
+        <Stack spacing={1}>
+          {days.map((d) => {
+            const r = rows[d]
+            const tt = week.data?.[d]
+            const firstFixed = days.find((x) => rows[x].on && rows[x].start && rows[x].end)
+            return (
+              <Box
+                key={d}
+                sx={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  px: 1.5,
+                  py: 1,
+                  borderRadius: '8px',
+                  border: `1px solid ${r.on ? tokens.accentLine : tokens.lineSoft}`,
+                  bgcolor: r.on ? tokens.accentSoft : 'transparent',
+                }}
+              >
+                <Typography sx={{ width: 96, textTransform: 'capitalize', fontWeight: 600, fontSize: 14 }}>{dayName(d)}</Typography>
+                <FormControlLabel
+                  control={<Switch size="small" checked={r.on} onChange={(e) => (e.target.checked ? turnOn(d) : set(d, { on: false }))} />}
+                  label={<Typography sx={{ fontSize: 13 }}>{t('presence.fixedHours')}</Typography>}
+                  sx={{ m: 0 }}
+                />
+                <Box sx={{ flex: 1, minWidth: 200 }}>
+                  {r.on ? (
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <TimeField size="small" value={r.start} onChange={(v) => set(d, { start: v })} sx={{ width: 140 }} error={invalid.includes(d)} slotProps={{ htmlInput: { 'aria-label': `${dayName(d)} — ${t('presence.arrival')}` } }} />
+                      <Typography color="text.secondary">→</Typography>
+                      <TimeField size="small" value={r.end} onChange={(v) => set(d, { end: v })} sx={{ width: 140 }} error={invalid.includes(d)} slotProps={{ htmlInput: { 'aria-label': `${dayName(d)} — ${t('presence.departure')}` } }} />
+                    </Stack>
+                  ) : (
+                    <Typography sx={{ fontSize: 13, color: tokens.inkMuted }}>
+                      {week.isPending
+                        ? '…'
+                        : tt
+                          ? t(member.is_assistant ? 'presence.followsSchool' : 'presence.followsTimetable', { start: tt.start, end: tt.end })
+                          : t(member.is_assistant ? 'presence.schoolClosed' : 'presence.noClassThatDay')}
+                    </Typography>
+                  )}
+                </Box>
+                {r.on && d === firstFixed && days.length > 1 && (
+                  <Button size="small" onClick={() => applyToAll(d)}>
+                    {t('presence.applyToAll')}
+                  </Button>
+                )}
+              </Box>
+            )
+          })}
         </Stack>
         {invalid.length > 0 && <Alert severity="warning" sx={{ mt: 2 }}>{t('presence.hoursInvalid')}</Alert>}
         {save.isError && <Alert severity="error" sx={{ mt: 2 }}>{errorMessage(save.error, t)}</Alert>}

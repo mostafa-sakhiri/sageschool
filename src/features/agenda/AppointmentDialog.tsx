@@ -14,6 +14,7 @@ import { errorMessage, must } from '#/lib/errors'
 import { formatDate, normalizePhone, todayIso } from '#/lib/format'
 import { studentsQuery } from '#/features/students/api'
 import { membersQuery } from '#/features/team/api'
+import { TimeField } from '#/components/TimeField'
 
 export const KINDS = ['visit_parent', 'visit_student', 'visit_prospect', 'enrollment', 'meeting', 'other'] as const
 export type Kind = (typeof KINDS)[number]
@@ -162,20 +163,18 @@ export function AppointmentDialog({
             </Stack>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField type="date" label={t('common.date')} value={date} onChange={(e) => setDate(e.target.value)} required slotProps={{ inputLabel: { shrink: true } }} fullWidth />
-              <TextField
-                type="time"
+              <TimeField
                 label={t('agenda.from')}
                 value={startTime}
-                onChange={(e) => {
-                  const v = e.target.value
+                onChange={(v) => {
                   setStartTime(v)
-                  if (endTime <= v) setEndTime(plusMinutes(v, 30))
+                  if (v && endTime <= v) setEndTime(plusMinutes(v, 30))
                 }}
                 required
                 slotProps={{ inputLabel: { shrink: true } }}
                 fullWidth
               />
-              <TextField type="time" label={t('agenda.to')} value={endTime} onChange={(e) => setEndTime(e.target.value)} required error={invalidTime} slotProps={{ inputLabel: { shrink: true } }} fullWidth />
+              <TimeField label={t('agenda.to')} value={endTime} onChange={setEndTime} required error={invalidTime} slotProps={{ inputLabel: { shrink: true } }} fullWidth />
             </Stack>
             {kind === 'visit_prospect' ? (
               <Alert severity="info" icon={false}>

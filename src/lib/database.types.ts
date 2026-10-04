@@ -1695,26 +1695,81 @@ export type Database = {
           },
         ]
       }
+      room_areas: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          parent_id: string | null
+          position: number
+          school_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          name: string
+          parent_id?: string | null
+          position?: number
+          school_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          name?: string
+          parent_id?: string | null
+          position?: number
+          school_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_areas_parent_id_school_id_fkey"
+            columns: ["parent_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "room_areas"
+            referencedColumns: ["id", "school_id"]
+          },
+          {
+            foreignKeyName: "room_areas_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rooms: {
         Row: {
+          area_id: string | null
           capacity: number | null
           id: string
           name: string
           school_id: string
         }
         Insert: {
+          area_id?: string | null
           capacity?: number | null
           id?: string
           name: string
           school_id: string
         }
         Update: {
+          area_id?: string | null
           capacity?: number | null
           id?: string
           name?: string
           school_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "rooms_area_fkey"
+            columns: ["area_id", "school_id"]
+            isOneToOne: false
+            referencedRelation: "room_areas"
+            referencedColumns: ["id", "school_id"]
+          },
           {
             foreignKeyName: "rooms_school_id_fkey"
             columns: ["school_id"]
@@ -2807,6 +2862,16 @@ export type Database = {
       }
     }
     Functions: {
+      _add_template_nodes: {
+        Args: {
+          p_codes: string[]
+          p_nodes: Json
+          p_parent_id: string
+          p_school_id: string
+          p_whole: boolean
+        }
+        Returns: number
+      }
       _insert_curriculum_children: {
         Args: { p_nodes: Json; p_parent_id: string; p_school_id: string }
         Returns: number
@@ -2827,6 +2892,14 @@ export type Database = {
           subject_name: string
           weekly_minutes: number
         }[]
+      }
+      add_curriculum_nodes: {
+        Args: {
+          p_codes: string[]
+          p_school_id: string
+          p_template_code: string
+        }
+        Returns: number
       }
       apply_curriculum_template_hours: {
         Args: {
@@ -2901,6 +2974,7 @@ export type Database = {
         Args: { p_version_id: string }
         Returns: undefined
       }
+      remove_curriculum_node: { Args: { p_node_id: string }; Returns: number }
       replace_class_teacher: {
         Args: {
           p_class_id: string
