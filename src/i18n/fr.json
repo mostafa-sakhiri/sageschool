@@ -884,9 +884,6 @@
   "sched.discard": "Annuler les modifications",
   "sched.edit": "Modifier",
   "sched.hintMany": "Chaque cycle a sa journée : récréations, déjeuner, sieste… Un jour peut différer (vendredi plus court, récréation décalée).",
-  "sched.kind": "Type",
-  "sched.label": "Libellé (facultatif)",
-  "sched.labelPlaceholder": "Libellé (facultatif)",
   "sched.noDays": "Aucun jour choisi",
   "sched.noPause": "Aucune pause.",
   "sched.none": "Aucun horaire défini.",
@@ -1235,5 +1232,6 @@
   "year.none": "Aucune année scolaire",
   "year.noneHint": "Créez l'année en cours pour ajouter classes et horaires.",
   "year.setCurrent": "Passer en cours",
-  "year.start": "Début"
+  "year.start": "Début",
+  "sched.pauseName": "Nom de la pause"
 }

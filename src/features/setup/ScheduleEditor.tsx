@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
+  Divider,
   IconButton,
   MenuItem,
   Paper,
@@ -367,35 +369,16 @@ function DayForm({ day, onChange }: { day: DaySchedule; onChange: (d: DaySchedul
         <Box sx={{ flex: 1 }} />
         <Chip size="small" sx={{ bgcolor: tokens.accentSoft, color: tokens.accentDark, fontWeight: 600 }} label={t('sched.activities', { min: formatMinutes(teachableMinutes(day), locale) })} />
       </Stack>
+      <Divider />
 
       {day.pauses.map((p, i) => (
         <Box key={i}>
           <Stack direction="row" spacing={1.25} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-            <TextField
-              select
-              size="small"
-              value={p.kind}
-              onChange={(e) => setPause(i, { kind: e.target.value as Pause['kind'] })}
-              sx={{ width: 170 }}
-              slotProps={{ htmlInput: { 'aria-label': t('sched.kind') } }}
-            >
-              {PAUSE_KINDS.map((k) => (
-                <MenuItem key={k} value={k}>
-                  {t(`pause.${k}`)}
-                </MenuItem>
-              ))}
-            </TextField>
+            <PauseName pause={p} onChange={(x) => setPause(i, x)} />
             <TimeField size="small" value={p.start} onChange={(v) => setPause(i, { start: v })} error={wrong(p)} sx={{ width: 120 }} slotProps={{ htmlInput: { 'aria-label': `${pauseLabel(p, t)} — ${t('setup.start')}` } }} />
             <Typography color="text.secondary">→</Typography>
             <TimeField size="small" value={p.end} onChange={(v) => setPause(i, { end: v })} error={wrong(p)} sx={{ width: 120 }} slotProps={{ htmlInput: { 'aria-label': `${pauseLabel(p, t)} — ${t('setup.end')}` } }} />
-            <TextField
-              size="small"
-              placeholder={t('sched.labelPlaceholder')}
-              value={p.label ?? ''}
-              onChange={(e) => onChange({ ...day, pauses: day.pauses.map((x, j) => (j === i ? { ...x, label: e.target.value || undefined } : x)) })}
-              sx={{ flex: '1 1 160px', minWidth: 140 }}
-              slotProps={{ htmlInput: { 'aria-label': t('sched.label') } }}
-            />
+            <Box sx={{ flex: 1 }} />
             <Tooltip title={t('common.delete')}>
               <IconButton aria-label={`${t('common.delete')} — ${pauseLabel(p, t)}`} onClick={() => onChange({ ...day, pauses: day.pauses.filter((_, j) => j !== i) })}>
                 <DeleteOutlined fontSize="small" />
@@ -403,7 +386,7 @@ function DayForm({ day, onChange }: { day: DaySchedule; onChange: (d: DaySchedul
             </Tooltip>
           </Stack>
           {wrong(p) && (
-            <Typography sx={{ fontSize: 12, color: tokens.dangerInk, mt: 0.25, ml: { sm: '182px' } }}>
+            <Typography sx={{ fontSize: 12, color: tokens.dangerInk, mt: 0.25, ml: { sm: '232px' } }}>
               {p.end <= p.start ? t('sched.pauseEndsFirst') : t('sched.pauseOutsideDay', { start: day.start, end: day.end })}
             </Typography>
           )}
@@ -419,5 +402,55 @@ function DayForm({ day, onChange }: { day: DaySchedule; onChange: (d: DaySchedul
       </Stack>
       {openWrong && <Alert severity="warning">{t('sched.openingWrong')}</Alert>}
     </Stack>
+  )
+}
+
+// A pause's name, one field: type to rename it ("Récré du matin"), or pick a
+// usual kind from the list. Typing a kind's name exactly makes it that kind;
+// any other name keeps the kind (its colour, the nap...) and becomes the label.
+function PauseName({ pause, onChange }: { pause: Pause; onChange: (p: Partial<Pause>) => void }) {
+  const { t } = useI18n()
+  const shown = pauseLabel(pause, t)
+  const [text, setText] = useState(shown)
+  const [focused, setFocused] = useState(false)
+  useEffect(() => {
+    if (!focused) setText(shown)
+  }, [shown, focused])
+  const kindNamed = (v: string) => PAUSE_KINDS.find((k) => t(`pause.${k}`).toLowerCase() === v.trim().toLowerCase())
+  const apply = (v: string) => {
+    const k = kindNamed(v)
+    if (k) onChange({ kind: k, label: undefined })
+    else onChange({ label: v.trim() || undefined })
+  }
+  return (
+    <Autocomplete
+      freeSolo
+      disableClearable
+      size="small"
+      options={PAUSE_KINDS.map((k) => t(`pause.${k}`))}
+      // the whole list on opening, not only what matches the current name
+      filterOptions={(o) => o}
+      inputValue={text}
+      onInputChange={(_, v, reason) => {
+        setText(v)
+        if (reason !== 'reset') apply(v)
+      }}
+      onChange={(_, v) => {
+        if (typeof v === 'string') {
+          setText(v)
+          apply(v)
+        }
+      }}
+      onFocus={() => setFocused(true)}
+      onBlur={() => {
+        setFocused(false)
+        // emptied: back to the kind's own name
+        if (!text.trim()) setText(t(`pause.${pause.kind}`))
+      }}
+      sx={{ width: 220 }}
+      renderInput={(params) => (
+        <TextField {...params} slotProps={{ ...params.slotProps, htmlInput: { ...params.slotProps.htmlInput, 'aria-label': t('sched.pauseName') } }} />
+      )}
+    />
   )
 }

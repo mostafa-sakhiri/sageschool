@@ -884,9 +884,6 @@
   "sched.discard": "إلغاء التعديلات",
   "sched.edit": "تعديل",
   "sched.hintMany": "لكل سلك يومه: الاستراحات، الغداء، القيلولة… ويمكن أن يختلف يوم عن آخر.",
-  "sched.kind": "النوع",
-  "sched.label": "التسمية (اختياري)",
-  "sched.labelPlaceholder": "التسمية (اختياري)",
   "sched.noDays": "لم يُختر أي يوم",
   "sched.noPause": "لا توجد استراحة.",
   "sched.none": "لم يحدد أي توقيت.",
@@ -1235,5 +1232,6 @@
   "year.none": "لا توجد سنة دراسية",
   "year.noneHint": "أنشئوا السنة الجارية لإضافة الأقسام والحصص.",
   "year.setCurrent": "جعلها جارية",
-  "year.start": "البداية"
+  "year.start": "البداية",
+  "sched.pauseName": "اسم الاستراحة"
 }
