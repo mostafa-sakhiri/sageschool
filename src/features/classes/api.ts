@@ -71,6 +71,22 @@ export const teacherCoverageQuery = (schoolId: string, classIds: string[]) =>
     },
   })
 
+// One teacher for every subject of a class (its titulaire), or any set of
+// class × subject: what was assigned there is replaced. `teacherId` '' clears.
+export async function assignTeacher(schoolId: string, pairs: { classId: string; subjectId: string }[], teacherId: string) {
+  if (!pairs.length) return
+  const classIds = [...new Set(pairs.map((p) => p.classId))]
+  const existing = must(await supabase.from('teaching_assignments').select('id, class_id, subject_id').in('class_id', classIds))
+  const doomed = existing.filter((a) => pairs.some((p) => p.classId === a.class_id && p.subjectId === a.subject_id)).map((a) => a.id)
+  if (doomed.length) must(await supabase.from('teaching_assignments').delete().in('id', doomed))
+  if (teacherId)
+    must(
+      await supabase
+        .from('teaching_assignments')
+        .insert(pairs.map((p) => ({ school_id: schoolId, class_id: p.classId, subject_id: p.subjectId, teacher_member_id: teacherId }))),
+    )
+}
+
 export const teachersQuery = (schoolId: string) =>
   queryOptions({
     queryKey: ['school', schoolId, 'teachers'],

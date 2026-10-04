@@ -9,6 +9,8 @@ import {
   ListItemText,
   Paper,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from '@mui/material'
@@ -22,11 +24,14 @@ import {
   hoursQuery,
   leafNodes,
   nodeLabel,
+  nodeName,
   nodesQuery,
   resolvedHoursQuery,
   subjectsQuery,
 } from '#/features/structure/api'
 import { useFillHeight } from '#/lib/useFillHeight'
+import ExpandLessOutlined from '@mui/icons-material/ExpandLessOutlined'
+import ExpandMoreOutlined from '@mui/icons-material/ExpandMoreOutlined'
 import { tokens } from '#/theme/theme'
 
 // "La matière d'abord" (mockup W2): subjects on one side, every level with
@@ -40,6 +45,9 @@ export function HoursSection({ schoolId, yearId }: { schoolId: string; yearId: s
   const hours = useQuery(hoursQuery(schoolId, yearId))
   const resolved = useQuery(resolvedHoursQuery(schoolId, yearId))
   const [selected, setSelected] = useState<string | null>(null)
+  // One cycle at a time: its subjects, its levels
+  const [cycleId, setCycleId] = useState<string | null>(null)
+  const [showOthers, setShowOthers] = useState(false)
   const [newSubject, setNewSubject] = useState('')
   const fill = useFillHeight()
 
@@ -90,17 +98,30 @@ export function HoursSection({ schoolId, yearId }: { schoolId: string; yearId: s
     },
   })
 
-  const leaves = useMemo(() => leafNodes(nodes.data ?? []), [nodes.data])
+  const cycles = useMemo(() => (nodes.data ?? []).filter((n) => n.kind === 'cycle'), [nodes.data])
+  const cycle = cycles.find((c) => c.id === cycleId) ?? cycles[0]
+  const leaves = useMemo(
+    () => leafNodes(nodes.data ?? []).filter((l) => !cycle || l.path.includes(cycle.id)),
+    [nodes.data, cycle],
+  )
   const pending = (hours.data ?? []).filter((h) => h.status !== 'confirmed').length
 
   if (nodes.isPending || subjects.isPending || hours.isPending || resolved.isPending) return <Loading rows={5} />
   const error = nodes.error ?? subjects.error ?? hours.error ?? resolved.error
   if (error) return <Alert severity="error">{errorMessage(error, t)}</Alert>
 
-  const subjectList = subjects.data ?? []
-  const current = selected ?? subjectList[0]?.id ?? null
   const rowFor = (nodeId: string, subjectId: string) =>
     (resolved.data ?? []).find((r) => r.node_id === nodeId && r.subject_id === subjectId)
+  const taughtHere = (subjectId: string) => leaves.some((l) => (rowFor(l.id, subjectId)?.weekly_minutes ?? 0) > 0)
+  const allSubjects = subjects.data ?? []
+  const subjectList = allSubjects.filter((s) => taughtHere(s.id))
+  const others = allSubjects.filter((s) => !taughtHere(s.id))
+  const taughtIn = (c: { id: string }) =>
+    allSubjects.filter((s) =>
+      leafNodes(nodes.data ?? []).some((l) => l.path.includes(c.id) && (rowFor(l.id, s.id)?.weekly_minutes ?? 0) > 0),
+    ).length
+  const current = (allSubjects.some((s) => s.id === selected) ? selected : null) ?? subjectList[0]?.id ?? null
+  const currentIsOther = others.some((s) => s.id === current)
   const statusFor = (definedOn: string, subjectId: string) =>
     (hours.data ?? []).find((h) => h.node_id === definedOn && h.subject_id === subjectId)?.status
   const countFor = (subjectId: string) => leaves.filter((l) => rowFor(l.id, subjectId)).length
@@ -121,6 +142,33 @@ export function HoursSection({ schoolId, yearId }: { schoolId: string; yearId: s
       )}
       {(setMinutes.isError || addSubject.isError) && (
         <Alert severity="error">{errorMessage(setMinutes.error ?? addSubject.error, t)}</Alert>
+      )}
+      {cycles.length > 1 && (
+        <Tabs
+          value={cycle?.id ?? false}
+          onChange={(_, id) => {
+            setCycleId(id)
+            setSelected(null)
+            setShowOthers(false)
+          }}
+          variant="scrollable"
+          allowScrollButtonsMobile
+          sx={{ borderBottom: `1px solid ${tokens.line}` }}
+        >
+          {cycles.map((c) => (
+            <Tab
+              key={c.id}
+              value={c.id}
+              sx={{ alignItems: 'flex-start', textAlign: 'start' }}
+              label={
+                <Box>
+                  <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{nodeName(c, locale)}</Typography>
+                  <Typography sx={{ fontSize: 12, color: tokens.inkMuted }}>{t('hours.subjectsCount', { n: taughtIn(c) })}</Typography>
+                </Box>
+              }
+            />
+          ))}
+        </Tabs>
       )}
       <Box ref={fill.ref} sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '280px 1fr' }, height: { md: fill.height }, minHeight: { md: 420 } }}>
         <Paper variant="outlined" sx={{ p: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -144,7 +192,7 @@ export function HoursSection({ schoolId, yearId }: { schoolId: string; yearId: s
               {t('common.add')}
             </Button>
           </Stack>
-          {subjectList.length === 0 && <Typography sx={{ p: 2 }}>{t('hours.noSubjects')}</Typography>}
+          {subjectList.length === 0 && <Typography sx={{ p: 2, color: tokens.inkMuted, fontSize: 14 }}>{t('hours.noneInCycle')}</Typography>}
           <List dense sx={{ flex: 1, minHeight: 0, overflowY: 'auto', maxHeight: { xs: 460, md: 'none' } }}>
             {subjectList.map((s) => (
               <ListItemButton key={s.id} selected={s.id === current} onClick={() => setSelected(s.id)} sx={{ borderRadius: 2 }}>
@@ -155,6 +203,24 @@ export function HoursSection({ schoolId, yearId }: { schoolId: string; yearId: s
                 />
               </ListItemButton>
             ))}
+            {others.length > 0 && (
+              <>
+                <ListItemButton onClick={() => setShowOthers((o) => !o)} sx={{ borderRadius: 2, mt: 1 }}>
+                  <ListItemText
+                    primary={t('hours.others', { n: others.length })}
+                    secondary={t('hours.othersHint')}
+                    slotProps={{ primary: { sx: { fontSize: 13, color: tokens.inkMuted, fontWeight: 600 } } }}
+                  />
+                  {showOthers || currentIsOther ? <ExpandLessOutlined fontSize="small" /> : <ExpandMoreOutlined fontSize="small" />}
+                </ListItemButton>
+                {(showOthers || currentIsOther) &&
+                  others.map((s) => (
+                    <ListItemButton key={s.id} selected={s.id === current} onClick={() => setSelected(s.id)} sx={{ borderRadius: 2, pl: 3 }}>
+                      <ListItemText primary={s.name} slotProps={{ primary: { sx: { color: tokens.inkMuted } } }} />
+                    </ListItemButton>
+                  ))}
+              </>
+            )}
           </List>
         </Paper>
 
@@ -164,7 +230,7 @@ export function HoursSection({ schoolId, yearId }: { schoolId: string; yearId: s
           ) : (
             <Stack spacing={1}>
               <Typography variant="h4" sx={{ mb: 1 }}>
-                {subjectList.find((s) => s.id === current)?.name}
+                {allSubjects.find((s) => s.id === current)?.name}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 {t('hours.hint')}
@@ -213,17 +279,8 @@ function HoursRow({
   const [value, setValue] = useState(String(minutes / 60))
   const dirty = Number(value) * 60 !== minutes
   return (
-    <Stack
-      direction={{ xs: 'column', sm: 'row' }}
-      spacing={1.5}
-      sx={{
-        alignItems: { sm: 'center' },
-        p: 1.25,
-        borderRadius: 2,
-        border: `1px solid ${tokens.lineSoft}`,
-        bgcolor: minutes ? tokens.surface : tokens.fill,
-      }}
-    >
+    <Box sx={{ p: 1.25, borderRadius: 2, border: `1px solid ${tokens.lineSoft}`, bgcolor: minutes ? tokens.surface : tokens.fill }}>
+    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography sx={{ fontWeight: 500, fontSize: 14 }}>{label}</Typography>
         {inheritedFrom && (
@@ -252,5 +309,6 @@ function HoursRow({
         {t('common.save')}
       </Button>
     </Stack>
+    </Box>
   )
 }

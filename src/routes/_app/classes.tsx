@@ -51,6 +51,7 @@ import {
   teacherCoverageQuery,
   teachersQuery,
   type ClassRow,
+  assignTeacher,
 } from '#/features/classes/api'
 import { tokens } from '#/theme/theme'
 
@@ -374,6 +375,23 @@ function ClassDetail({ cls, onClose }: { cls: ClassRow; onClose: () => void }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'assignments'] }),
   })
 
+  // The class teacher (préscolaire, primaire): one teacher for every subject
+  const [homeTeacher, setHomeTeacher] = useState('')
+  const assignAll = useMutation({
+    mutationFn: async (teacherId: string) =>
+      assignTeacher(
+        ctx.school.id,
+        (hours.data ?? []).map((h) => ({ classId: cls.id, subjectId: h.subject_id! })),
+        teacherId,
+      ),
+    onSuccess: () => {
+      setHomeTeacher('')
+      return queryClient.invalidateQueries({ queryKey: ['school', ctx.school.id, 'assignments'] })
+    },
+  })
+  const otherTeachers = (teacherId: string) =>
+    (assignments.data ?? []).filter((a) => a.subject_id && a.teacher_member_id !== teacherId).length
+
   const subjectName = (id: string) => subjects.data?.find((s) => s.id === id)?.name ?? '—'
   const totalMin = (hours.data ?? []).reduce((s, h) => s + (h.weekly_minutes ?? 0), 0)
 
@@ -390,7 +408,38 @@ function ClassDetail({ cls, onClose }: { cls: ClassRow; onClose: () => void }) {
           <CloseOutlined />
         </IconButton>
       </Stack>
-      {assign.isError && <Alert severity="error">{errorMessage(assign.error, t)}</Alert>}
+      {(assign.isError || assignAll.isError) && <Alert severity="error">{errorMessage(assign.error ?? assignAll.error, t)}</Alert>}
+      {ctx.isAdmin && (hours.data ?? []).length > 0 && (teachers.data ?? []).length > 0 && (
+        <Paper variant="outlined" sx={{ p: 1.5 }}>
+          <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t('classes.homeTeacher')}</Typography>
+          <Typography sx={{ fontSize: 12.5, color: tokens.inkMuted, mb: 1 }}>{t('classes.homeTeacherHint')}</Typography>
+          <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <TextField
+              select
+              size="small"
+              value={homeTeacher}
+              onChange={(e) => setHomeTeacher(e.target.value)}
+              sx={{ minWidth: 220 }}
+              slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': t('classes.homeTeacher') } }}
+            >
+              <MenuItem value="" disabled>
+                <em>{t('classes.chooseTeacher')}</em>
+              </MenuItem>
+              {(teachers.data ?? []).map((tt) => (
+                <MenuItem key={tt.id} value={tt.id}>
+                  {tt.name}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Button variant="contained" size="small" disabled={!homeTeacher} loading={assignAll.isPending} onClick={() => assignAll.mutate(homeTeacher)}>
+              {t('classes.assignAllSubjects', { n: hours.data?.length ?? 0 })}
+            </Button>
+            {homeTeacher && otherTeachers(homeTeacher) > 0 && (
+              <Typography sx={{ fontSize: 12.5, color: tokens.warnInk }}>{t('classes.replaces', { n: otherTeachers(homeTeacher) })}</Typography>
+            )}
+          </Stack>
+        </Paper>
+      )}
       {hours.isPending || assignments.isPending ? (
         <Loading rows={6} />
       ) : (hours.data ?? []).length === 0 ? (
